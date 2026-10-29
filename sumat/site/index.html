@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sumat by An Lantawan</title>
+<meta name="description" content="Say what's on your mind. Sumat is the open line of An Lantawan, the official student publication of Leyte Normal University.">
+<meta property="og:title" content="Sumat by An Lantawan">
+<meta property="og:description" content="Say what's on your mind. Anonymous by default, read only by the An Lantawan editorial team.">
+<meta name="theme-color" content="#FFE400">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Uses the licensed Tungsten Condensed Bold when installed on the device; everyone else gets Anton. */
+  @font-face {
+    font-family: "Sumat Display";
+    src: local("Tungsten Condensed Bold"), local("TungstenCond-Bold"), local("Tungsten Bold");
+  }
+  :root {
+    --white: #FFFFFF;
+    --ink: #0A0A0A;
+    --grey-50: #FAFAFA;
+    --grey-100: #F3F3F1;
+    --grey-300: #D6D6D3;
+    --grey-600: #6B6B68;
+    --yellow: #FFE400;
+    --yellow-deep: #FFC700;
+    --sunrise: linear-gradient(180deg, var(--yellow) 0%, var(--yellow-deep) 100%);
+    --error: #B42318;
+    --font-ui: "Helvetica Now Display", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-display: "Sumat Display", "Anton", "Helvetica Neue", Impact, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100svh;
+    background: var(--white);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .page {
+    width: 100%;
+    max-width: 440px;
+    padding: 20px 16px 32px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  @media (min-width: 720px) {
+    .page { justify-content: center; padding-top: 48px; padding-bottom: 48px; }
+  }
+
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+  .brand svg { width: 22px; height: 35px; flex: none; }
+  .brand b { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .brand span { font-size: 13px; color: var(--grey-600); }
+
+  .page > * { min-width: 0; }
+  .demo {
+    overflow-wrap: anywhere;
+    font-size: 13px; line-height: 1.4;
+    background: var(--grey-100); border: 1px solid var(--grey-300);
+    border-radius: 12px; padding: 10px 12px;
+  }
+
+  .card {
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .label {
+    margin: 0;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--grey-600);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sunrise); border: 1px solid var(--ink); }
+
+  .prompt { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em; }
+
+  .field { position: relative; }
+  .field textarea {
+    display: block; width: 100%;
+    height: 168px; resize: vertical; min-height: 140px;
+    padding: 16px 16px 36px;
+    background: var(--grey-50);
+    border: 1px solid var(--grey-300); border-radius: 14px;
+    font-size: 16px; line-height: 1.5;
+  }
+  .field textarea::placeholder { color: var(--grey-600); }
+  .count { position: absolute; right: 14px; bottom: 12px; font-size: 13px; color: var(--grey-600); pointer-events: none; }
+
+  .group { display: flex; flex-direction: column; gap: 10px; border: 0; padding: 0; margin: 0; }
+  .toggle {
+    display: flex; gap: 4px; padding: 4px;
+    background: var(--grey-100); border: 1px solid var(--grey-300); border-radius: 999px;
+  }
+  .toggle button {
+    flex: 1; border: 0; background: transparent; cursor: pointer;
+    padding: 11px 8px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; color: var(--grey-600);
+  }
+  .toggle button[aria-checked="true"] { background: var(--ink); color: var(--white); }
+
+  .named { display: flex; flex-direction: column; gap: 10px; }
+  .named[hidden] { display: none; }
+  .named label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
+  .named input {
+    padding: 12px 14px; font-size: 16px; font-weight: 400;
+    background: var(--grey-50); border: 1px solid var(--grey-300); border-radius: 12px;
+  }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; padding: 17px 24px; border-radius: 999px;
+    font-size: 16px; font-weight: 600; text-decoration: none; cursor: pointer;
+  }
+  .btn-send { background: var(--sunrise); border: 1.5px solid var(--ink); color: var(--ink); }
+  .btn-send:disabled { background: var(--grey-100); border-color: var(--grey-300); color: var(--grey-600); cursor: not-allowed; }
+  .btn-dark { background: var(--ink); border: 1.5px solid var(--ink); color: var(--white); }
+  .btn-outline { background: var(--white); border: 1px solid var(--grey-300); color: var(--ink); }
+
+  .note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--grey-600); text-align: center; }
+  .error { margin: 0; font-size: 14px; line-height: 1.4; color: var(--error); }
+  .error:empty { display: none; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  .sent { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: 24px 4px; }
+  .badge {
+    width: 112px; height: 112px; border-radius: 50%;
+    background: var(--sunrise); border: 1.5px solid var(--ink);
+    display: grid; place-items: center;
+  }
+  .sent h1 {
+    margin: 0; font-family: var(--font-display); font-weight: 400;
+    font-size: 88px; line-height: 0.9; text-transform: uppercase; letter-spacing: 0.005em;
+  }
+  .sent h1:focus { outline: none; }
+  .sent p.lead { margin: 0; font-size: 18px; line-height: 1.45; }
+  .actions { width: 100%; display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+
+  footer { font-size: 12px; color: var(--grey-600); text-align: center; padding-top: 8px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .badge { animation: pop 420ms cubic-bezier(.2, .8, .2, 1.2) both; }
+    @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <a class="brand" href="./" aria-label="Sumat by An Lantawan">
+    <svg viewBox="0 0 1015 1630" aria-hidden="true">
+      <defs><linearGradient id="torch" x1="600" y1="0" x2="300" y2="1400" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE400"/><stop offset="1" stop-color="#FFC700"/></linearGradient></defs>
+      <path d="M135 600 L880 75 L608 1455 L298 1625 Z" fill="#E6E6E6"/>
+      <path d="M193 235 L392 62 L408 75 L500 0 L492 345 L373 430 L380 632 L268 695 Z" fill="url(#torch)" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+      <path d="M497 205 L655 230 L492 345 Z" fill="url(#torch)" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+      <path d="M268 695 L380 632 L373 430 L660 230 L558 745 L640 770 L510 1350 L427 1402 L415 1288 L385 1332 L380 1308 L367 1325 Z" fill="url(#torch)" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+    </svg>
+    <b>Sumat</b><span>by An Lantawan</span>
+  </a>
+
+  <p class="demo" id="demo" hidden>Demo mode: messages are not saved. Set <code>CONFIG.endpoint</code> before launch.</p>
+
+  <!-- Compose -->
+  <form class="card" id="compose" novalidate>
+    <p class="label"><span class="dot" aria-hidden="true"></span>Today's prompt</p>
+    <h1 class="prompt" id="prompt">What do you want to say?</h1>
+
+    <div class="field">
+      <label for="message" class="hp">Your message</label>
+      <textarea id="message" name="message" maxlength="500" placeholder="Type it here. Be honest, be fair." aria-describedby="count"></textarea>
+      <span class="count" id="count" aria-live="polite">0 / 500</span>
+    </div>
+
+    <div class="group" role="radiogroup" aria-labelledby="sendas-label">
+      <p class="label" id="sendas-label">Send as</p>
+      <div class="toggle">
+        <button type="button" role="radio" aria-checked="true" data-identity="anonymous">Anonymous</button>
+        <button type="button" role="radio" aria-checked="false" data-identity="named">With my name</button>
+      </div>
+    </div>
+
+    <div class="named" id="named" hidden>
+      <label>Your name<input id="name" name="name" maxlength="80" autocomplete="name"></label>
+      <label><span>Course and year <span style="font-weight:400;color:var(--grey-600)">(optional)</span></span><input id="course" name="course" maxlength="80" placeholder="e.g. BSEd English 3"></label>
+    </div>
+
+    <div class="hp" aria-hidden="true"><label>Website<input id="website" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div id="turnstile"></div>
+
+    <p class="error" id="error" role="alert"></p>
+    <button class="btn btn-send" id="send" type="submit" disabled>Send it &rarr;</button>
+    <p class="note">Only the An Lantawan editorial team reads this. Nothing is published without review.</p>
+  </form>
+
+  <!-- Sent -->
+  <section class="sent" id="sent" hidden aria-live="polite">
+    <div class="badge" aria-hidden="true">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0A0A0A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h1 tabindex="-1" id="sent-title">Sent.</h1>
+    <p class="lead">Your voice reached the newsroom.<br>Thanks for telling us.</p>
+    <div class="actions">
+      <button class="btn btn-dark" id="again" type="button">Send another</button>
+      <a class="btn btn-outline" id="facebook" href="#" target="_blank" rel="noopener">Follow An Lantawan on Facebook</a>
+    </div>
+    <p class="note" id="sent-as">Sent anonymously</p>
+  </section>
+
+  <!-- Closed -->
+  <section class="card" id="closed" hidden>
+    <p class="label"><span class="dot" aria-hidden="true"></span>Sumat is closed</p>
+    <h1 class="prompt">We're not taking messages right now.</h1>
+    <p class="note" style="text-align:left">Follow An Lantawan on Facebook to see when the next prompt opens.</p>
+  </section>
+
+  <footer>An Lantawan, the official student publication of Leyte Normal University</footer>
+</main>
+
+<script>
+  // Edit these before launch. See DEPLOY.md.
+  const CONFIG = {
+    endpoint: "https://script.google.com/macros/s/AKfycbwTLispukeiMVYGG94Bs8vVcHc3-_ubaQedA3bA_pHFtEDNrKDyvsfFHNLcxvQD_MXGoQ/exec",                     // Intake web app URL (ends in /exec)
+    facebookUrl: "https://www.facebook.com/AnLantawanLNU",
+    turnstileSiteKey: "",             // Optional Cloudflare Turnstile site key
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const form = $("compose"), message = $("message"), count = $("count"), send = $("send");
+  const named = $("named"), nameInput = $("name"), courseInput = $("course"), error = $("error");
+  const radios = [...document.querySelectorAll('[role="radio"]')];
+  const DRAFT_KEY = "sumat-draft";
+  const openedAt = Date.now();
+  let maxLength = 500;
+  let identity = "anonymous";
+  let turnstileToken = "";
+
+  const store = {
+    get() { try { return localStorage.getItem(DRAFT_KEY) || ""; } catch { return ""; } },
+    set(v) { try { v ? localStorage.setItem(DRAFT_KEY, v) : localStorage.removeItem(DRAFT_KEY); } catch {} },
+  };
+
+  function update() {
+    count.textContent = `${message.value.length} / ${maxLength}`;
+    const ready = message.value.trim().length >= 2 && (identity === "anonymous" || nameInput.value.trim());
+    send.disabled = !ready;
+  }
+
+  function setIdentity(value) {
+    identity = value;
+    radios.forEach((r) => r.setAttribute("aria-checked", String(r.dataset.identity === value)));
+    named.hidden = value !== "named";
+    if (value === "named") nameInput.focus();
+    update();
+  }
+
+  radios.forEach((r, i) => {
+    r.addEventListener("click", () => setIdentity(r.dataset.identity));
+    r.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const next = radios[(i + (e.key === "ArrowRight" ? 1 : -1) + radios.length) % radios.length];
+      next.focus();
+      setIdentity(next.dataset.identity);
+    });
+  });
+
+  message.addEventListener("input", () => { store.set(message.value); error.textContent = ""; update(); });
+  nameInput.addEventListener("input", update);
+
+  const ERRORS = {
+    closed: "Sumat isn't taking messages right now.",
+    empty: "Write a message before sending.",
+    name_required: "Add your name, or switch to Anonymous.",
+    too_fast: "That was quick. Wait a few seconds, then send again.",
+    busy: "Lots of messages right now. Try again in a minute.",
+    verification: "We couldn't verify the request. Reload the page and try again.",
+  };
+
+  async function submit(payload) {
+    if (!CONFIG.endpoint) {
+      await new Promise((r) => setTimeout(r, 600));
+      return { ok: true };
+    }
+    const res = await fetch(CONFIG.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids a CORS preflight
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (send.disabled) return;
+    send.disabled = true;
+    send.textContent = "Sending…";
+    error.textContent = "";
+    try {
+      const result = await submit({
+        message: message.value,
+        identity,
+        name: identity === "named" ? nameInput.value : "",
+        course: identity === "named" ? courseInput.value : "",
+        website: $("website").value,
+        elapsedMs: Date.now() - openedAt,
+        turnstileToken,
+      });
+      if (!result.ok) throw new Error(result.error || "server");
+      showSent();
+    } catch (err) {
+      error.textContent = ERRORS[err.message] || "Your message didn't send. Check your connection and try again.";
+      send.textContent = "Send it →";
+      update();
+      if (window.turnstile && CONFIG.turnstileSiteKey) window.turnstile.reset();
+    }
+  });
+
+  function showSent() {
+    $("sent-as").textContent = identity === "named" ? "Sent with your name" : "Sent anonymously";
+    store.set("");
+    form.hidden = true;
+    $("sent").hidden = false;
+    $("sent-title").focus();
+  }
+
+  $("again").addEventListener("click", () => {
+    message.value = "";
+    nameInput.value = "";
+    courseInput.value = "";
+    send.textContent = "Send it →";
+    setIdentity("anonymous");
+    $("sent").hidden = true;
+    form.hidden = false;
+    message.focus();
+  });
+
+  async function loadSettings() {
+    if (!CONFIG.endpoint) { $("demo").hidden = false; return; }
+    try {
+      const res = await fetch(CONFIG.endpoint);
+      const s = await res.json();
+      if (s.prompt) $("prompt").textContent = s.prompt;
+      if (s.maxLength) { maxLength = s.maxLength; message.maxLength = s.maxLength; }
+      if (s.accepting === false) { form.hidden = true; $("closed").hidden = false; }
+    } catch {
+      // Keep the default prompt; sending will surface any real problem.
+    }
+    update();
+  }
+
+  function loadTurnstile() {
+    if (!CONFIG.turnstileSiteKey) return;
+    window.onTurnstileLoad = () => window.turnstile.render("#turnstile", {
+      sitekey: CONFIG.turnstileSiteKey,
+      callback: (t) => { turnstileToken = t; },
+      "expired-callback": () => { turnstileToken = ""; },
+    });
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad";
+    s.async = true;
+    document.head.appendChild(s);
+  }
+
+  $("facebook").href = CONFIG.facebookUrl;
+  message.value = store.get();
+  update();
+  loadSettings();
+  loadTurnstile();
+</script>
+</body>
+</html>
