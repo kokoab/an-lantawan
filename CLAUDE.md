@@ -18,7 +18,7 @@ sumat/
   DEPLOY.md                     Launch guide written for student editors
 ```
 
-- Hosting: Cloudflare Pages free tier (`*.pages.dev`) until LNU ICT grants a subdomain such as `sumat.lnu.edu.ph`.
+- Hosting: Cloudflare Workers static assets, free tier, live at https://an-lantawan.anlantawan.workers.dev. Deployed from GitHub `kokoab/an-lantawan` (`main`) with build root `sumat/site`; every push to `main` redeploys, so don't push untested changes. `sumat/site/wrangler.jsonc` is the config; `.assetsignore` keeps it unpublished. A subdomain such as `sumat.lnu.edu.ph` comes later via LNU ICT.
 - Data: Google Sheet in the publication's LNU Google Workspace account. Submissions tab columns: ID, Received, Prompt, Message, Sent as, Name, Course and year, Status, Editor notes. Statuses: New, Shortlisted, Published, Archived.
 - Editors change the prompt and open/closed state in the Sheet's Settings tab. Keep it that way: no code changes for routine use.
 - No build step and no framework. Student staff rotate yearly, so anything added must be maintainable by a non-developer following DEPLOY.md.

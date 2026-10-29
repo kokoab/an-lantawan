@@ -6,7 +6,7 @@ Three pieces, about 20 minutes in total. Do everything while signed in to the **
 |---|---|---|
 | Inbox | A Google Sheet that stores every message | Google Drive (private) |
 | Intake | A small script that receives messages, saves them, and emails editors | Attached to the Sheet |
-| Page | The Sumat page students see | Cloudflare Pages (free) |
+| Page | The Sumat page students see | Cloudflare Workers (free), deployed from GitHub |
 | Dashboard | A private review page for editors | Google Apps Script |
 
 ---
@@ -40,11 +40,12 @@ Three pieces, about 20 minutes in total. Do everything while signed in to the **
    };
    ```
    While `endpoint` is empty, the page shows a "Demo mode" notice and saves nothing.
-2. Go to [dash.cloudflare.com](https://dash.cloudflare.com), sign up free, then **Workers & Pages → Create → Pages → Upload assets**.
-3. Name the project `anlantawan-sumat` and upload the **`site`** folder. Your page is live at `https://anlantawan-sumat.pages.dev` (or the closest available name).
-4. To update the page later, upload the `site` folder again as a new deployment in the same project.
+2. Commit and push to the GitHub repo (`kokoab/an-lantawan`, branch `main`).
+3. In [dash.cloudflare.com](https://dash.cloudflare.com): **Workers & Pages → Create → Import a repository**, pick the repo, and in the build settings set **Root directory** to `sumat/site`. Cloudflare uses `sumat/site/wrangler.jsonc` to deploy the folder as a static site.
+4. The page is live at `https://an-lantawan.anlantawan.workers.dev`.
+5. To update the page later, push to `main`. Cloudflare rebuilds and redeploys automatically in under a minute.
 
-*No Cloudflare account?* [app.netlify.com/drop](https://app.netlify.com/drop) also works: drag the `site` folder in, then rename the site to get `anlantawan-sumat.netlify.app`.
+Only files inside `sumat/site` are published. `sumat/site/.assetsignore` keeps `wrangler.jsonc` itself private. Anything else in the repo (scripts, this guide) is never served.
 
 ## 3. Set up the editors' dashboard
 
@@ -74,8 +75,8 @@ In the dashboard, editors can filter by status (New, Shortlisted, Published, Arc
 
 The page already has a hidden spam trap, a minimum time on page, and a 60-messages-per-minute limit. If junk still gets through:
 
-1. Cloudflare dashboard → **Turnstile → Add widget**. Add the page's domain (e.g. `anlantawan-sumat.pages.dev`), mode **Managed**.
-2. Put the **site key** in `CONFIG.turnstileSiteKey` in `site/index.html` and upload the site again.
+1. Cloudflare dashboard → **Turnstile → Add widget**. Add the page's domain (`an-lantawan.anlantawan.workers.dev`), mode **Managed**.
+2. Put the **site key** in `CONFIG.turnstileSiteKey` in `site/index.html` and push to `main`.
 3. In the intake Apps Script: **Project Settings → Script properties → Add**: name `TURNSTILE_SECRET`, value = the **secret key**. Then redeploy a new version (see the note in section 1).
 
 ## Everyday use
@@ -86,7 +87,12 @@ The page already has a hidden spam trap, a minimum time on page, and a 60-messag
 
 ## Later: your own address
 
-When LNU ICT is ready, in Cloudflare Pages open the project → **Custom domains → Set up a domain** and enter e.g. `sumat.lnu.edu.ph`. Cloudflare shows the one DNS record (a CNAME to `anlantawan-sumat.pages.dev`) that ICT needs to add. Nothing else changes.
+A Worker can only use a custom domain whose DNS is managed in Cloudflare, and `lnu.edu.ph` isn't. When LNU ICT is ready, pick one:
+
+- **Move the page to Cloudflare Pages (simplest).** Create a Pages project from the same repo (build output directory `sumat/site`), add `sumat.lnu.edu.ph` under **Custom domains**, and give ICT the single CNAME record Cloudflare shows. Pages supports this without moving LNU's DNS.
+- **Or ask ICT to delegate just the subdomain** (`sumat.lnu.edu.ph`) to Cloudflare with NS records, then add it under the Worker's **Domains**.
+
+Nothing in the page or scripts changes either way. Remember to add the new domain to Turnstile if you use it.
 
 ## What is and isn't private
 
