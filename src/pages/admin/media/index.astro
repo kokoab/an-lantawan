@@ -1,0 +1,185 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import { optionalText } from '../../../core/forms';
+import { parsePage } from '../../../core/paging';
+import { db } from '../../../db/client';
+import { listMedia } from '../../../db/queries/admin/media';
+import Admin from '../../../layouts/Admin.astro';
+import { editorOf, record } from '../../../lib/admin';
+import { formatBytes } from '../../../lib/format';
+import { storeUpload } from '../../../lib/uploads';
+import { mediaUrl } from '../../../lib/urls';
+
+const editor = editorOf(Astro);
+let uploadError: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData().catch(() => null);
+  const file = form?.get('file');
+  if (!(file instanceof File) || file.size === 0) uploadError = 'Choose a file to upload.';
+  else {
+    const alt = optionalText(300).safeParse(String(form?.get('alt') ?? ''));
+    const stored = await storeUpload(db, file, editor.id, { alt: alt.success ? alt.data : null });
+    if (stored.ok) {
+      await record(editor, {
+        action: 'upload',
+        entityType: 'media',
+        entityId: stored.media.id,
+        summary: `Uploaded ${stored.media.key.split('/').pop()}`,
+      });
+      return Astro.redirect(`/admin/media/${stored.media.id}?done=uploaded`, 303);
+    }
+    uploadError = stored.error;
+  }
+  Astro.response.status = 422;
+}
+
+const params = Astro.url.searchParams;
+const kind = params.get('kind') === 'pdf' ? 'pdf' : params.get('kind') === 'image' ? 'image' : null;
+const q = (params.get('q') ?? '').trim().slice(0, 100);
+const page = parsePage(params.get('page')) ?? 1;
+const { rows, total, pages } = await listMedia(db, { kind, q, page, perPage: 36 });
+const href = (p: number) => {
+  const u = new URLSearchParams();
+  if (kind) u.set('kind', kind);
+  if (q) u.set('q', q);
+  if (p > 1) u.set('page', String(p));
+  return `/admin/media${u.size ? `?${u}` : ''}`;
+};
+---
+
+<Admin title="Photos and files" section="media">
+  <form class="panel form upload" method="post" enctype="multipart/form-data">
+    <h2>Upload</h2>
+    {uploadError && <p class="field-error" role="alert">{uploadError}</p>}
+    <div class="row two">
+      <div class="field">
+        <label for="upload-file">Photo or PDF</label>
+        <input id="upload-file" type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" required />
+        <p class="hint">Photos up to 10 MB (JPG, PNG, WebP or GIF). PDFs up to 50 MB.</p>
+      </div>
+      <Field
+        name="alt"
+        label="Describe the photo"
+        hint="For readers who can’t see it. You can add a caption and credit next."
+        maxlength={300}
+      />
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Upload</button>
+    </div>
+  </form>
+
+  <form class="toolbar" method="get" role="search">
+    <Field name="q" label="Search" type="search" value={q} placeholder="Words in the description or file name" />
+    <div class="field narrow">
+      <label for="f-kind">Show</label>
+      <select id="f-kind" name="kind" data-autosubmit>
+        <option value="">Everything</option>
+        <option value="image" selected={kind === 'image'}>Photos</option>
+        <option value="pdf" selected={kind === 'pdf'}>PDFs</option>
+      </select>
+    </div>
+    <button class="btn btn-secondary" type="submit">Search</button>
+  </form>
+
+  <p class="muted small">{total} {total === 1 ? 'file' : 'files'}</p>
+  {
+    rows.length === 0 ? (
+      <div class="empty-state">
+        <h2>{q || kind ? 'Nothing matches' : 'No files yet'}</h2>
+        <p>{q || kind ? 'Try other words, or show everything.' : 'Upload the first photo above.'}</p>
+        {(q || kind) && (
+          <a class="btn btn-secondary" href="/admin/media">
+            Show everything
+          </a>
+        )}
+      </div>
+    ) : (
+      <ul class="grid">
+        {rows.map((m) => (
+          <li>
+            <a href={`/admin/media/${m.id}`}>
+              {m.kind === 'image' ? (
+                <img src={mediaUrl(m.key)} alt="" loading="lazy" decoding="async" />
+              ) : (
+                <span class="pdf">PDF</span>
+              )}
+              <span class="name">{m.alt || m.key.split('/').pop()}</span>
+              <span class="muted small">
+                {m.kind === 'image' && m.width ? `${m.width} × ${m.height}, ` : ''}
+                {formatBytes(m.bytes)}
+                {!m.alt && m.kind === 'image' && <span class="badge red">No description</span>}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  {
+    pages > 1 && (
+      <nav class="pager" aria-label="Pages">
+        {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Previous</a> : <span />}
+        <span class="muted small">
+          Page {page} of {pages}
+        </span>
+        {page < pages ? <a class="btn btn-secondary" href={href(page + 1)}>Next</a> : <span />}
+      </nav>
+    )
+  }
+</Admin>
+
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .grid a {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    padding: 8px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .grid a:hover {
+    border-color: var(--ink);
+  }
+  .grid img,
+  .pdf {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    margin-bottom: 4px;
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .pdf {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--grey-600);
+  }
+  .name {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .grid .badge {
+    margin-left: 4px;
+  }
+  .admin input[type='file'] {
+    padding: 8px;
+    border: 1px dashed var(--grey-300);
+    background: var(--white);
+  }
+</style>

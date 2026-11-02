@@ -1,0 +1,253 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import { parseForm } from '../../../core/forms';
+import { db } from '../../../db/client';
+import { deleteMedia, getMedia, mediaUsage, updateMedia } from '../../../db/queries/admin/media';
+import { listPeopleChoices } from '../../../db/queries/admin/people';
+import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, idParam, one, readForm, record } from '../../../lib/admin';
+import { mediaForm } from '../../../lib/admin-schemas';
+import { formatBytes, formatStamp } from '../../../lib/format';
+import { removeStored } from '../../../lib/uploads';
+import { focalClasses, mediaUrl } from '../../../lib/urls';
+
+const editor = editorOf(Astro);
+const id = idParam(Astro.params.id);
+const file = id ? await getMedia(db, id) : null;
+if (!file) return Astro.rewrite('/404');
+const here = `/admin/media/${file.id}`;
+const name = file.key.split('/').pop() ?? file.key;
+
+const usage = await mediaUsage(db, file.id);
+const used =
+  usage.stories.length + usage.issues.length + usage.people.length + usage.tribus.length > 0;
+const tenth = (n: number) => String(Math.round(n * 10) / 10);
+let values: Record<string, unknown> = {
+  ...file,
+  focalX: tenth(file.focalX),
+  focalY: tenth(file.focalY),
+};
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  if (one(form, 'intent') === 'delete') {
+    if (used) {
+      errors.form = 'This file is still in use. Remove it from the places listed first.';
+    } else {
+      await deleteMedia(db, file.id);
+      await removeStored(file.key);
+      await record(editor, {
+        action: 'delete',
+        entityType: 'media',
+        entityId: file.id,
+        summary: `Deleted ${name}`,
+      });
+      return doneRedirect(Astro, '/admin/media', 'deleted');
+    }
+  } else {
+    const parsed = parseForm(mediaForm, form);
+    if (parsed.ok) {
+      await updateMedia(db, file.id, parsed.data);
+      await record(editor, {
+        action: 'update',
+        entityType: 'media',
+        entityId: file.id,
+        summary: `Edited ${name}`,
+      });
+      return doneRedirect(Astro, here, 'saved');
+    }
+    errors = parsed.errors;
+    values = form;
+  }
+  Astro.response.status = 422;
+}
+
+const people = await listPeopleChoices(db);
+const STEPS = Array.from({ length: 11 }, (_, i) => ({
+  value: String(i / 10),
+  label: `${i * 10}%`,
+}));
+const v = (k: string) => (values[k] ?? '') as string;
+const isImage = file.kind === 'image';
+---
+
+<Admin title={file.alt || name} section="media" back={{ label: 'Photos and files', href: '/admin/media' }}>
+  <a slot="actions" class="btn btn-secondary" href={mediaUrl(file.key)} target="_blank" rel="noopener">
+    Open the file
+  </a>
+  {errors.form && <p class="admin-error-summary" role="alert">{errors.form}</p>}
+  <div class="columns main-side">
+    <form class="panel form" method="post">
+      {
+        isImage ? (
+          <div class="focal" data-focal>
+            <img src={mediaUrl(file.key)} alt="" />
+            <span class:list={['marker', focalClasses({ focalX: Number(v('focalX')), focalY: Number(v('focalY')) })]} data-focal-marker />
+          </div>
+        ) : (
+          <p class="pdf">PDF, {formatBytes(file.bytes)}</p>
+        )
+      }
+      {isImage && <p class="hint">Click the photo on the part that must stay in view when it’s cropped, such as a face.</p>}
+      <Field name="alt" label="Description" value={v('alt')} error={errors.alt} maxlength={300} hint="What the photo shows, for readers who can’t see it." />
+      <Field name="caption" label="Caption" type="textarea" rows={2} value={v('caption')} error={errors.caption} maxlength={500} />
+      <div class="row two">
+        <Field
+          name="creditPersonId"
+          label="Credit: someone on staff"
+          type="select"
+          empty="Nobody on staff"
+          options={people.map((p) => ({ value: p.id, label: p.name }))}
+          value={v('creditPersonId')}
+          error={errors.creditPersonId}
+        />
+        <Field
+          name="creditText"
+          label="Or credit someone else"
+          value={v('creditText')}
+          error={errors.creditText}
+          placeholder="Photo from LNU OSA"
+          maxlength={120}
+        />
+      </div>
+      {
+        isImage ? (
+          <div class="row two">
+            <Field name="focalX" label="Keep in view: across" type="select" options={STEPS} value={String(v('focalX'))} id="focal-x" />
+            <Field name="focalY" label="Keep in view: down" type="select" options={STEPS} value={String(v('focalY'))} id="focal-y" />
+          </div>
+        ) : (
+          <>
+            <input type="hidden" name="focalX" value="0.5" />
+            <input type="hidden" name="focalY" value="0.5" />
+          </>
+        )
+      }
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+
+    <div>
+      <section class="panel">
+        <h2>File</h2>
+        <dl class="facts small">
+          <dt>Name</dt>
+          <dd>{name}</dd>
+          {isImage && file.width && (
+            <>
+              <dt>Size</dt>
+              <dd>
+                {file.width} × {file.height} pixels
+              </dd>
+            </>
+          )}
+          <dt>Weight</dt>
+          <dd>{formatBytes(file.bytes)}</dd>
+          <dt>Uploaded</dt>
+          <dd>{formatStamp(file.createdAt)}</dd>
+        </dl>
+      </section>
+      <section class="panel">
+        <h2>Used in</h2>
+        {
+          used ? (
+            <ul class="uses small">
+              {usage.stories.map((s) => (
+                <li>
+                  Story: <a href={`/admin/stories/${s.id}`}>{s.title}</a>
+                </li>
+              ))}
+              {usage.issues.map((s) => (
+                <li>
+                  Print issue: <a href={`/admin/print/${s.id}`}>{s.title}</a>
+                </li>
+              ))}
+              {usage.people.map((s) => (
+                <li>
+                  Photo of <a href={`/admin/people/${s.id}`}>{s.name}</a>
+                </li>
+              ))}
+              {usage.tribus.map((s) => (
+                <li>
+                  Logo of <a href="/admin/sportsfest/tribus">{s.name}</a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              <p class="panel-note">Nothing uses this file, so it can be deleted.</p>
+              <form method="post">
+                <input type="hidden" name="intent" value="delete" />
+                <button class="btn btn-danger" type="submit" data-confirm="Delete this file for good? This can’t be undone.">
+                  Delete file
+                </button>
+              </form>
+            </>
+          )
+        }
+      </section>
+    </div>
+  </div>
+</Admin>
+
+<script>
+  import '../../../scripts/focal';
+</script>
+
+<style>
+  .focal {
+    position: relative;
+    align-self: flex-start;
+    max-width: 100%;
+    cursor: crosshair;
+  }
+  .focal img {
+    max-height: 480px;
+    border: 1px solid var(--grey-300);
+  }
+  .marker {
+    position: absolute;
+    left: var(--fx);
+    top: var(--fy);
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border: 2px solid var(--white);
+    outline: 2px solid var(--ink);
+    background: var(--sunrise);
+    pointer-events: none;
+  }
+  .pdf {
+    margin: 0;
+    padding: 24px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    font-weight: 600;
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    margin: 0;
+  }
+  .facts dt {
+    color: var(--grey-600);
+  }
+  .facts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .uses {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding-left: 18px;
+  }
+  .uses a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+</style>
