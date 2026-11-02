@@ -1,14 +1,117 @@
 ---
-import AdminAuth from '../../layouts/AdminAuth.astro';
+import { db } from '../../db/client';
+import { getOverview } from '../../db/queries/admin/overview';
+import Admin from '../../layouts/Admin.astro';
+import { editorOf } from '../../lib/admin';
+import { formatStamp } from '../../lib/format';
 
-// The middleware guarantees an editor here.
-const editor = Astro.locals.editor as NonNullable<App.Locals['editor']>;
+const editor = editorOf(Astro);
+const o = await getOverview(db);
+const STATUS = {
+  draft: 'Draft',
+  scheduled: 'Scheduled',
+  published: 'Published',
+  archived: 'Archived',
+};
 ---
 
-<AdminAuth title="Admin">
-  <h1>Hi, {editor.name}</h1>
-  <p>Signed in as {editor.email}. The full admin is being built.</p>
-  <form method="post" action="/auth/signout">
-    <button class="button secondary" type="submit">Sign out</button>
-  </form>
-</AdminAuth>
+<Admin title={`Hi, ${editor.name.split(' ')[0]}`} section="dashboard">
+  <a slot="actions" class="btn btn-primary" href="/admin/stories/new">Write a story</a>
+
+  <div class="stat-grid">
+    <a class="stat" href="/admin/sumat">
+      <strong>{o.unread}</strong>
+      <span>New Sumat {o.unread === 1 ? 'message' : 'messages'}</span>
+    </a>
+    <a class="stat" href="/admin/stories?status=draft">
+      <strong>{o.drafts}</strong>
+      <span>{o.drafts === 1 ? 'Draft' : 'Drafts'}</span>
+    </a>
+    <a class="stat" href="/admin/stories?status=scheduled">
+      <strong>{o.scheduled}</strong>
+      <span>Scheduled</span>
+    </a>
+    <a class="stat" href="/admin/stories?status=published">
+      <strong>{o.published}</strong>
+      <span>Published</span>
+    </a>
+  </div>
+
+  <div class="columns main-side">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Recently edited</h2>
+        <a class="small" href="/admin/stories">All stories</a>
+      </div>
+      {
+        o.recent.length === 0 ? (
+          <p class="muted">No stories yet. Write the first one.</p>
+        ) : (
+          <div class="table-wrap">
+            <table class="table">
+              <tbody>
+                {o.recent.map((s) => (
+                  <tr>
+                    <th scope="row">
+                      <a href={`/admin/stories/${s.id}`}>{s.title}</a>
+                    </th>
+                    <td class="muted hide-sm">{s.section}</td>
+                    <td>
+                      <span class:list={['badge', { ink: s.status === 'published', sun: s.status === 'scheduled' }]}>
+                        {STATUS[s.status]}
+                      </span>
+                    </td>
+                    <td class="muted small hide-sm">{formatStamp(s.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Activity</h2>
+        <a class="small" href="/admin/activity">All activity</a>
+      </div>
+      {
+        o.activity.length === 0 ? (
+          <p class="muted">Changes made in the admin show up here.</p>
+        ) : (
+          <ul class="activity">
+            {o.activity.map((a) => (
+              <li>
+                <span>{a.summary}</span>
+                <span class="muted small">
+                  {a.editor ?? 'Someone'}, {formatStamp(a.at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </section>
+  </div>
+</Admin>
+
+<style>
+  .activity {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .activity li {
+    display: flex;
+    flex-direction: column;
+    padding-block: 10px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .activity li:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+</style>
