@@ -1,0 +1,77 @@
+---
+/** Yellow band on the Sports page that points to the Sportsfest hub. */
+interface Props {
+  sportsfest: { name: string; status: string };
+}
+
+const { sportsfest } = Astro.props;
+const COPY: Record<string, { title: string; text: string }> = {
+  ongoing: {
+    title: `${sportsfest.name} is on`,
+    text: 'Medal tally, results and every event, updated as games finish.',
+  },
+  upcoming: {
+    title: `${sportsfest.name} is coming`,
+    text: 'See the events, the schedule and the tribus taking part.',
+  },
+  final: {
+    title: `${sportsfest.name} results`,
+    text: 'The final medal tally and every event result.',
+  },
+};
+const copy = COPY[sportsfest.status] ?? COPY.final;
+---
+
+<section class="band sportsfest" aria-label="Sportsfest">
+  <div class="copy">
+    <p class="title">{copy.title}</p>
+    <p>{copy.text}</p>
+  </div>
+  <a class="btn btn-primary" href="/sportsfest">Go to Sportsfest</a>
+</section>
+
+<style>
+  .sportsfest {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding-block: 24px;
+    background: var(--sunrise);
+    border-block: 1px solid var(--ink);
+  }
+  .copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 22px;
+    letter-spacing: -0.01em;
+  }
+  .title {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 30px;
+    letter-spacing: -0.01em;
+  }
+  @media (min-width: 1024px) {
+    .sportsfest {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+      padding-block: 32px;
+    }
+    p {
+      font-size: 17px;
+      line-height: 24px;
+    }
+    .title {
+      font-size: 28px;
+      line-height: 34px;
+    }
+  }
+</style>
