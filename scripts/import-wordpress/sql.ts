@@ -73,3 +73,14 @@ export function storySql(s: PlannedStory, links: StoryLinks): string[] {
   }
   return out;
 }
+
+/**
+ * Removes people an earlier run created under a spelling that has since been merged into
+ * someone else, as long as nothing still credits them.
+ */
+export function orphanPeopleSql(slugs: string[]): string[] {
+  return slugs.map(
+    (slug) =>
+      `DELETE FROM people WHERE slug = ${sqlText(slug)} AND id NOT IN (SELECT person_id FROM story_authors) AND id NOT IN (SELECT person_id FROM staff_terms);`,
+  );
+}

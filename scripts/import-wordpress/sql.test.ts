@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mediaSql, sqlText, storySql } from './sql.ts';
+import { mediaSql, orphanPeopleSql, sqlText, storySql } from './sql.ts';
 import type { PlannedStory } from './transform.ts';
 
 const story: PlannedStory = {
@@ -75,5 +75,13 @@ describe('mediaSql', () => {
     });
     expect(s).toContain("NULL, 'Hi'");
     expect(s).toContain('ON CONFLICT(key) DO UPDATE SET mime');
+  });
+});
+
+describe('orphanPeopleSql', () => {
+  it('only removes people nobody credits', () => {
+    const [s] = orphanPeopleSql(['darlin-margate']);
+    expect(s).toContain("slug = 'darlin-margate'");
+    expect(s).toContain('NOT IN (SELECT person_id FROM story_authors)');
   });
 });

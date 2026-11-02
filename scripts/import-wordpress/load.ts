@@ -15,7 +15,7 @@ import { promisify } from 'node:util';
 import { imageSize } from 'image-size';
 import { slugify } from './classify.ts';
 import type { FoundImage } from './html-to-doc.ts';
-import { mediaSql, personSql, type StoredImage, storySql, tagSql } from './sql.ts';
+import { mediaSql, orphanPeopleSql, personSql, type StoredImage, storySql, tagSql } from './sql.ts';
 import { planImport, type WpPost } from './transform.ts';
 
 const run = promisify(execFile);
@@ -206,6 +206,11 @@ for (const s of stories) {
     }),
   );
 }
+// Spellings that were merged into someone else (aliases.json, or matched automatically).
+const mergedAway = [...people.canonical]
+  .filter(([spelling, name]) => spelling !== name)
+  .map(([s]) => slugify(s));
+sql.push(...orphanPeopleSql(mergedAway.filter((slug) => ![...personSlug.values()].includes(slug))));
 const sqlFile = new URL(`import-${target.slice(2)}.sql`, OUT);
 writeFileSync(sqlFile, `${sql.join('\n')}\n`);
 writeFileSync(new URL('import-skipped-photos.txt', OUT), `${dropped.join('\n')}\n`);
