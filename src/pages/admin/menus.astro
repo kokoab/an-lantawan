@@ -1,0 +1,138 @@
+---
+import { EDITABLE_MENUS, readMenuRows } from '../../core/menus';
+import { db } from '../../db/client';
+import { listMenuItems, saveMenu } from '../../db/queries/admin/menus';
+import { listAllSections } from '../../db/queries/admin/sections';
+import Admin from '../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readForm, record } from '../../lib/admin';
+
+const editor = editorOf(Astro);
+let failed: { group: string; error: string; rows: Array<Record<string, string>> } | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const menu = EDITABLE_MENUS.find((m) => m.group === one(form, 'group'));
+  if (menu) {
+    const list = (n: string) => {
+      const v = form[n];
+      return v === undefined ? [] : Array.isArray(v) ? v : [v];
+    };
+    // Rows are reordered by the order number typed beside them.
+    const order = list('order').map((o, i) => ({ i, o: Number(o) || i + 1 }));
+    order.sort((a, b) => a.o - b.o || a.i - b.i);
+    const pick = (n: string) => order.map(({ i }) => list(n)[i] ?? '');
+    const r = readMenuRows(pick('label'), pick('section'), pick('href'), menu.max);
+    if (r.ok) {
+      await saveMenu(db, menu.group, r.rows);
+      await record(editor, {
+        action: 'update',
+        entityType: 'menu',
+        summary: `Changed the ${menu.label} menu`,
+      });
+      return doneRedirect(Astro, '/admin/menus', 'saved');
+    }
+    failed = {
+      group: menu.group,
+      error: r.error,
+      rows: list('label').map((label, i) => ({
+        label,
+        section: list('section')[i] ?? '',
+        href: list('href')[i] ?? '',
+      })),
+    };
+    Astro.response.status = 422;
+  }
+}
+
+const [items, sections] = await Promise.all([listMenuItems(db), listAllSections(db)]);
+const liveSections = sections.filter((s) => !s.archivedAt);
+const BLANK_ROWS = 2;
+const rowsFor = (group: string) => {
+  if (failed?.group === group) return failed.rows;
+  return items
+    .filter((i) => i.group === group)
+    .map((i) => ({
+      label: i.label,
+      section: i.sectionId ? String(i.sectionId) : '',
+      href: i.href ?? '',
+    }));
+};
+---
+
+<Admin title="Menus" section="menus">
+  <p class="panel-note">
+    Each link goes to a section or to an address: a path on this site like /print, or a full link
+    starting with https://. Clear a row to remove it. The Sportsfest links in the Menu panel are added
+    automatically while a Sportsfest exists.
+  </p>
+  {
+    EDITABLE_MENUS.map((m) => (
+      <form class="panel" method="post" id={`menu-${m.group}`}>
+        <input type="hidden" name="group" value={m.group} />
+        <div class="panel-head">
+          <h2>{m.label}</h2>
+          <span class="muted small">{m.note}</span>
+        </div>
+        {failed?.group === m.group && (
+          <p class="field-error" role="alert">
+            {failed.error} Nothing was saved.
+          </p>
+        )}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Order</th>
+                <th scope="col">Label</th>
+                <th scope="col">Section</th>
+                <th scope="col">Or address</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...rowsFor(m.group), ...Array.from({ length: BLANK_ROWS }, () => ({ label: '', section: '', href: '' }))].map(
+                (row, i) => (
+                  <tr>
+                    <td class="order">
+                      <input type="number" name="order" value={i + 1} min="1" max="99" aria-label={`Order of link ${i + 1}`} />
+                    </td>
+                    <td>
+                      <input type="text" name="label" value={row.label} maxlength="40" aria-label={`Label of link ${i + 1}`} />
+                    </td>
+                    <td>
+                      <select name="section" aria-label={`Section of link ${i + 1}`}>
+                        <option value="">None</option>
+                        {liveSections.map((s) => (
+                          <option value={s.id} selected={String(s.id) === row.section}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input type="text" name="href" value={row.href} aria-label={`Address of link ${i + 1}`} />
+                    </td>
+                  </tr>
+                ),
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Save {m.label.toLowerCase()} menu</button>
+        </div>
+      </form>
+    ))
+  }
+</Admin>
+
+<style>
+  .order {
+    width: 88px;
+  }
+  .table td {
+    min-width: 140px;
+  }
+  .table td.order {
+    min-width: 72px;
+  }
+</style>
