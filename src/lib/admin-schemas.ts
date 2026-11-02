@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   checkbox,
   date,
+  email,
   hexColor,
   id,
   optionalDate,
@@ -9,6 +10,7 @@ import {
   optionalId,
   optionalScore,
   optionalText,
+  path,
   schoolYear,
   slug,
   text,
@@ -159,3 +161,10 @@ export const pointsForm = z.object({
   draw: z.coerce.number().min(0).max(10),
   loss: z.coerce.number().min(0).max(10),
 });
+
+export const editorForm = z.object({
+  name: text(80, 'Add their name.'),
+  email,
+});
+
+export const redirectForm = z.object({ from: path, to: path });

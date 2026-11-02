@@ -1,0 +1,103 @@
+---
+import Field from '../../components/admin/Field.astro';
+import { parseForm } from '../../core/forms';
+import { db } from '../../db/client';
+import {
+  activeEditorCount,
+  addEditor,
+  findEditorByEmail,
+  listEditors,
+  setEditorArchived,
+} from '../../db/queries/admin/access';
+import Admin from '../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readForm, record } from '../../lib/admin';
+import { editorForm } from '../../lib/admin-schemas';
+import { formatStamp } from '../../lib/format';
+
+const me = editorOf(Astro);
+let values: Record<string, unknown> = {};
+let errors: Record<string, string> = {};
+let problem: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const intent = one(form, 'intent');
+  if (intent === 'archive' || intent === 'restore') {
+    const id = Number(one(form, 'editorId'));
+    const target = (await listEditors(db)).find((e) => e.id === id);
+    if (!target) problem = 'That editor is no longer here.';
+    else if (intent === 'archive' && target.id === me.id)
+      problem = 'You can’t remove yourself. Ask another editor to do it.';
+    else if (intent === 'archive' && (await activeEditorCount(db)) <= 1)
+      problem = 'Keep at least one editor, or nobody can sign in.';
+    else {
+      await setEditorArchived(db, target.id, intent === 'archive');
+      await record(me, {
+        action: intent,
+        entityType: 'editor',
+        entityId: target.id,
+        summary: `${intent === 'archive' ? 'Removed' : 'Restored'} admin access for ${target.email}`,
+      });
+      return doneRedirect(Astro, '/admin/editors', intent === 'archive' ? 'archived' : 'restored');
+    }
+  } else {
+    values = form;
+    const parsed = parseForm(editorForm, form);
+    if (!parsed.ok) errors = parsed.errors;
+    else if (await findEditorByEmail(db, parsed.data.email))
+      errors.email = 'This email can already sign in, or was removed. Restore it below instead.';
+    else {
+      const id = await addEditor(db, parsed.data.name, parsed.data.email);
+      await record(me, {
+        action: 'create',
+        entityType: 'editor',
+        entityId: id,
+        summary: `Gave admin access to ${parsed.data.email}`,
+      });
+      return doneRedirect(Astro, '/admin/editors', 'created');
+    }
+  }
+  Astro.response.status = 422;
+}
+
+const list = await listEditors(db);
+---
+
+<Admin title="Editors" section="editors">
+  {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
+  <div class="columns main-side">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th scope="col">Editor</th><th scope="col" class="hide-sm">Added</th><th scope="col"><span class="visually-hidden">Access</span></th></tr></thead>
+        <tbody>
+          {list.map((e) => (
+            <tr>
+              <th scope="row">
+                {e.name}{e.id === me.id && <span class="muted small"> (you)</span>}
+                <br /><span class="muted small">{e.email}</span>
+              </th>
+              <td class="muted small hide-sm">{formatStamp(e.createdAt)}</td>
+              <td class="actions">
+                {e.archivedAt ? (
+                  <form method="post"><input type="hidden" name="intent" value="restore" /><input type="hidden" name="editorId" value={e.id} /><button class="link-button small" type="submit">Restore access</button></form>
+                ) : e.id !== me.id ? (
+                  <form method="post"><input type="hidden" name="intent" value="archive" /><input type="hidden" name="editorId" value={e.id} /><button class="link-button danger small" type="submit" data-confirm={`Remove admin access for ${e.email}? They are signed out right away.`}>Remove access</button></form>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <form class="panel form" method="post">
+      <h2>Give someone access</h2>
+      <p class="panel-note">
+        They sign in with Google using this exact email. While the Google sign-in app is in testing, also add the email as a test user in Google Cloud.
+      </p>
+      <input type="hidden" name="intent" value="add" />
+      <Field name="name" label="Name" value={values.name as string} error={errors.name} maxlength={80} />
+      <Field name="email" label="Google email" type="email" value={values.email as string} error={errors.email} />
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Give access</button></div>
+    </form>
+  </div>
+</Admin>
