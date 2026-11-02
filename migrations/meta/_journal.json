@@ -50,6 +50,13 @@
       "when": 1793612255343,
       "tag": "0006_search",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793658126203,
+      "tag": "0007_tribus",
+      "breakpoints": true
     }
   ]
 }
