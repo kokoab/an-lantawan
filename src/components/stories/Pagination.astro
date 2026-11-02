@@ -1,0 +1,119 @@
+---
+/** Numbered pages with Previous and Next. Long runs collapse around the current page. */
+interface Props {
+  page: number;
+  pages: number;
+  /** Builds the link for a page number. */
+  href: (page: number) => string;
+}
+
+const { page, pages, href } = Astro.props;
+
+function visiblePages(): Array<number | 'gap'> {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+  const keep = new Set([1, pages, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pages));
+  const sorted = [...keep].sort((a, b) => a - b);
+  const out: Array<number | 'gap'> = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push('gap');
+    out.push(p);
+  });
+  return out;
+}
+---
+
+{
+  pages > 1 && (
+    <nav class="pagination" aria-label="Pages">
+      <a
+        class="btn btn-secondary"
+        href={page > 1 ? href(page - 1) : undefined}
+        aria-disabled={page === 1 ? 'true' : undefined}
+        rel="prev"
+      >
+        Previous
+      </a>
+      <ol class="pages">
+        {visiblePages().map((p) =>
+          p === 'gap' ? (
+            <li class="gap" aria-hidden="true">…</li>
+          ) : (
+            <li>
+              <a href={href(p)} aria-current={p === page ? 'page' : undefined} aria-label={`Page ${p}`}>
+                {p}
+              </a>
+            </li>
+          ),
+        )}
+      </ol>
+      <p class="count">Page {page} of {pages}</p>
+      <a
+        class="btn btn-secondary"
+        href={page < pages ? href(page + 1) : undefined}
+        aria-disabled={page === pages ? 'true' : undefined}
+        rel="next"
+      >
+        Next
+      </a>
+    </nav>
+  )
+}
+
+<style>
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 32px;
+  }
+  .pages {
+    display: none;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pages a,
+  .gap {
+    display: grid;
+    place-items: center;
+    width: 50px;
+    height: 50px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+  .gap {
+    border-color: transparent;
+    background: none;
+  }
+  .pages a:hover {
+    border-color: var(--ink);
+  }
+  .pages a[aria-current='page'] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--white);
+  }
+  .count {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--grey-600);
+  }
+  @media (min-width: 768px) {
+    .pagination {
+      padding-top: 40px;
+    }
+    .pages {
+      display: flex;
+    }
+    .count {
+      display: none;
+    }
+  }
+</style>
