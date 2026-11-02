@@ -8,6 +8,7 @@
   // Public values only. Secrets (GOOGLE_CLIENT_SECRET, TURNSTILE_SECRET) are set with
   // `wrangler secret put` and never committed.
   "vars": {
+    "GOOGLE_CLIENT_ID": "105816458039-5gu3i1r8lcvliqv3iocju0cqnatim15d.apps.googleusercontent.com",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFwU61vRquUhAg04"
   },
   "d1_databases": [
