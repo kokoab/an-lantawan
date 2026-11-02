@@ -14,9 +14,11 @@ interface Props {
   error?: string | null;
   /** Accept PDFs instead of photos. */
   pdf?: boolean;
+  /** Offer a box to remove the file; off for files a record can't do without. */
+  removable?: boolean;
 }
 
-const { name, label, current, hint, error, pdf = false } = Astro.props;
+const { name, label, current, hint, error, pdf = false, removable = true } = Astro.props;
 const id = `f-${name}`;
 ---
 
@@ -32,10 +34,12 @@ const id = `f-${name}`;
         ) : (
           <img src={mediaUrl(current.key)} alt={current.alt ?? ''} />
         )}
-        <label class="check small">
-          <input type="checkbox" name={`remove_${name}`} />
-          Remove
-        </label>
+        {removable && (
+          <label class="check small">
+            <input type="checkbox" name={`remove_${name}`} />
+            Remove
+          </label>
+        )}
       </div>
     )
   }
