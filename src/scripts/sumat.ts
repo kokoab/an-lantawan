@@ -60,6 +60,12 @@ export function initSumat() {
   const courseInput = byId<HTMLInputElement>('course');
   const error = byId('error');
   const sent = byId('sent');
+  // The prompt and compose sections give way to the "Sent." screen.
+  const composeParts = [...document.querySelectorAll<HTMLElement>('[data-compose-part]')];
+  const showCompose = (show: boolean) => {
+    for (const el of composeParts) el.hidden = !show;
+    sent.hidden = show;
+  };
   const radios = [...form.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   const maxLength = Number(form.dataset.maxLength) || 500;
   const turnstileSiteKey = form.dataset.turnstileSiteKey ?? '';
@@ -145,8 +151,8 @@ export function initSumat() {
   function showSent() {
     byId('sent-as').textContent = identity === 'named' ? 'Sent with your name' : 'Sent anonymously';
     draft.set('');
-    form.hidden = true;
-    sent.hidden = false;
+    showCompose(false);
+    window.scrollTo({ top: 0 });
     byId('sent-title').focus();
   }
 
@@ -157,8 +163,7 @@ export function initSumat() {
     send.textContent = SEND_LABEL;
     resetTurnstile();
     setIdentity('anonymous');
-    sent.hidden = true;
-    form.hidden = false;
+    showCompose(true);
     message.focus();
   });
 
