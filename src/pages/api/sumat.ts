@@ -4,6 +4,7 @@ import { checkSubmission, MAX_PER_MINUTE, type SubmissionError } from '../../cor
 import { db } from '../../db/client';
 import { getSettings } from '../../db/queries/settings';
 import { currentPrompt, recentMessageCount, saveMessage } from '../../db/queries/sumat';
+import { underLimit } from '../../lib/rate-limit';
 import { verifyTurnstile } from '../../lib/turnstile';
 
 const STATUS: Record<SubmissionError | 'server', number> = {
@@ -24,6 +25,9 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const prompt = await currentPrompt(db);
     if (!prompt) return reply({ ok: false, error: 'closed' });
+    if (!(await underLimit(env.SUMAT_LIMITER, request, 'sumat'))) {
+      return reply({ ok: false, error: 'busy' });
+    }
 
     const input = await request.json().catch(() => ({}));
     const { 'sumat.max_length': maxLength } = await getSettings(db, { 'sumat.max_length': 500 });

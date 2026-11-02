@@ -11,6 +11,8 @@ const ERRORS: Record<SubmissionError, string> = {
   busy: 'Lots of messages right now. Try again in a minute.',
   verification: "We couldn't verify the request. Reload the page and try again.",
 };
+const TURNSTILE_LOAD_ERROR =
+  "The spam check didn't load. Turn off content blockers for this page, then reload.";
 const FALLBACK_ERROR = "Your message didn't send. Check your connection and try again.";
 
 interface TurnstileApi {
@@ -68,7 +70,8 @@ export function initSumat() {
     count.textContent = `${message.value.length} / ${maxLength}`;
     const ready =
       message.value.trim().length >= 2 &&
-      (identity === 'anonymous' || nameInput.value.trim() !== '');
+      (identity === 'anonymous' || nameInput.value.trim() !== '') &&
+      (!turnstileSiteKey || turnstileToken !== '');
     send.disabled = !ready;
   }
 
@@ -134,7 +137,7 @@ export function initSumat() {
       error.textContent = ERRORS[code] ?? FALLBACK_ERROR;
       send.textContent = SEND_LABEL;
       update();
-      if (turnstileSiteKey) window.turnstile?.reset();
+      resetTurnstile();
     }
   });
 
@@ -151,26 +154,40 @@ export function initSumat() {
     nameInput.value = '';
     courseInput.value = '';
     send.textContent = SEND_LABEL;
+    resetTurnstile();
     setIdentity('anonymous');
     sent.hidden = true;
     form.hidden = false;
     message.focus();
   });
 
+  // A token works once, so every attempt needs a fresh one.
+  function resetTurnstile() {
+    if (!turnstileSiteKey) return;
+    turnstileToken = '';
+    window.turnstile?.reset();
+    update();
+  }
+
   if (turnstileSiteKey) {
+    const setToken = (t: string) => {
+      turnstileToken = t;
+      update();
+    };
     window.onTurnstileLoad = () =>
       window.turnstile?.render('#turnstile', {
         sitekey: turnstileSiteKey,
-        callback: (t: string) => {
-          turnstileToken = t;
-        },
-        'expired-callback': () => {
-          turnstileToken = '';
-        },
+        appearance: 'interaction-only',
+        callback: setToken,
+        'expired-callback': () => setToken(''),
+        'error-callback': () => setToken(''),
       });
     const s = document.createElement('script');
     s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
     s.async = true;
+    s.addEventListener('error', () => {
+      error.textContent = TURNSTILE_LOAD_ERROR;
+    });
     document.head.appendChild(s);
   }
 
