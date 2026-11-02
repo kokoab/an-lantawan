@@ -1,0 +1,122 @@
+---
+import { parsePage } from '../../../core/paging';
+import { db } from '../../../db/client';
+import { listMessages, type MessageStatus } from '../../../db/queries/admin/sumat';
+import Admin from '../../../layouts/Admin.astro';
+import { formatStamp } from '../../../lib/format';
+
+const TABS: Array<{ value: MessageStatus; label: string; note: string }> = [
+  { value: 'new', label: 'New', note: 'Messages nobody has sorted yet.' },
+  { value: 'shortlisted', label: 'Shortlisted', note: 'Kept for a closer look or to publish.' },
+  { value: 'published', label: 'Published', note: 'Messages that ran as letters.' },
+  {
+    value: 'archived',
+    label: 'Archived',
+    note: 'Read and set aside. Archived messages stay here.',
+  },
+];
+const tab = TABS.find((t) => t.value === Astro.url.searchParams.get('show')) ?? TABS[0];
+const page = parsePage(Astro.url.searchParams.get('page')) ?? 1;
+const { rows, counts, pages } = await listMessages(db, { status: tab.value, page, perPage: 40 });
+const href = (p: number) => `/admin/sumat?show=${tab.value}${p > 1 ? `&page=${p}` : ''}`;
+---
+
+<Admin title="Sumat inbox" section="sumat">
+  <a slot="actions" class="btn btn-secondary" href="/admin/sumat/prompts">Prompts</a>
+  <nav class="tabs" aria-label="Inbox">
+    {
+      TABS.map((t) => (
+        <a
+          class:list={['btn', t.value === tab.value ? 'btn-primary' : 'btn-secondary']}
+          href={`/admin/sumat?show=${t.value}`}
+          aria-current={t.value === tab.value ? 'page' : undefined}
+        >
+          {t.label} <span class="n">{counts[t.value] ?? 0}</span>
+        </a>
+      ))
+    }
+  </nav>
+  <p class="muted small">{tab.note} Only editors can read the inbox.</p>
+  {
+    rows.length === 0 ? (
+      <div class="empty-state">
+        <h2>{tab.value === 'new' ? 'No new messages' : `Nothing ${tab.label.toLowerCase()}`}</h2>
+        <p>{tab.value === 'new' ? 'New messages from /sumat show up here.' : 'Messages you move here show up in this list.'}</p>
+      </div>
+    ) : (
+      <ul class="messages">
+        {rows.map((m) => (
+          <li>
+            <a href={`/admin/sumat/${m.id}`}>
+              <span class="body">{m.body.length > 280 ? `${m.body.slice(0, 280)}…` : m.body}</span>
+              <span class="meta small">
+                <span class:list={['badge', { ink: m.sentAs === 'named' }]}>{m.sentAs === 'named' ? m.name || 'Signed' : 'Anonymous'}</span>
+                <span class="muted">{formatStamp(m.receivedAt)}</span>
+                <span class="muted prompt">{m.promptText}</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  {
+    pages > 1 && (
+      <nav class="pager" aria-label="Pages">
+        {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Previous</a> : <span />}
+        <span class="muted small">Page {page} of {pages}</span>
+        {page < pages ? <a class="btn btn-secondary" href={href(page + 1)}>Next</a> : <span />}
+      </nav>
+    )
+  }
+</Admin>
+
+<style>
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .n {
+    margin-left: 6px;
+    font-weight: 400;
+    opacity: 0.7;
+  }
+  .messages {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .messages a {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .messages a:hover {
+    border-color: var(--ink);
+  }
+  .body {
+    font-size: 16px;
+    line-height: 24px;
+    white-space: pre-line;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .prompt {
+    overflow: hidden;
+    max-width: 420px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>

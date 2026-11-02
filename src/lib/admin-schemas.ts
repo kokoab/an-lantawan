@@ -85,3 +85,18 @@ export const storyForm = z.object({
   creditRole: z.array(z.string()),
   eventIds: z.array(z.string()),
 });
+
+export const promptForm = z.object({
+  text: text(300, 'Write the question students answer.'),
+  opensAt: optionalDateTime,
+  closesAt: optionalDateTime,
+});
+
+export const letterForm = z.object({
+  text: text(3000, 'The letter can’t be empty.'),
+  signature: text(120, 'Add a signature, like Anonymous.'),
+  sectionId: id,
+  publishedAt: optionalDateTime,
+});
+
+export const notesForm = z.object({ notes: optionalText(2000) });
