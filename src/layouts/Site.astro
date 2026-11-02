@@ -1,0 +1,56 @@
+---
+/** Every public page except Sumat: header, menu, footer and the page grid. */
+import SiteFooter from '../components/site/SiteFooter.astro';
+import SiteHeader from '../components/site/SiteHeader.astro';
+import { db } from '../db/client';
+import { getCurrentSportsfest, getNavigation } from '../db/queries/navigation';
+import { getSettings } from '../db/queries/settings';
+import Base from './Base.astro';
+import '../styles/site.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  image?: string;
+  /** Section slug of the page, to mark it in the header. */
+  current?: string;
+}
+
+const { title, description, image, current } = Astro.props;
+const [nav, sportsfest, settings] = await Promise.all([
+  getNavigation(db),
+  getCurrentSportsfest(db),
+  getSettings(db, {
+    'site.name': 'An Lantawan',
+    'site.description':
+      'The official student publication of Leyte Normal University, Tacloban City.',
+    'site.tagline': 'Liberating the critical and creative mind.',
+    'site.facebook_url': 'https://www.facebook.com/AnLantawanLNU',
+  }),
+]);
+const siteName = settings['site.name'];
+const pageTitle = title === siteName ? title : `${title} · ${siteName}`;
+---
+
+<Base title={pageTitle} description={description ?? settings['site.description']} image={image}>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <SiteHeader
+    nav={nav}
+    siteName={siteName}
+    tagline={settings['site.tagline']}
+    facebookUrl={settings['site.facebook_url']}
+    sportsfest={sportsfest}
+    current={current}
+  />
+  <main id="main">
+    <slot />
+  </main>
+  <SiteFooter
+    nav={nav}
+    siteName={siteName}
+    tagline={settings['site.tagline']}
+    description={settings['site.description']}
+    facebookUrl={settings['site.facebook_url']}
+    hasSportsfest={sportsfest !== null}
+  />
+</Base>
