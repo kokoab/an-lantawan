@@ -102,7 +102,7 @@ Astro.response.headers.set('Cache-Control', 'no-store');
               <input id="website" name="website" tabindex="-1" autocomplete="off" />
             </label>
           </div>
-          <div id="turnstile" />
+          <div id="turnstile" class="turnstile" />
 
           <p class="error" id="error" role="alert" />
           <button class="btn btn-send" id="send" type="submit" disabled>
@@ -426,6 +426,13 @@ Astro.response.headers.set('Cache-Control', 'no-store');
   }
   .error:empty {
     display: none;
+  }
+  /* Invisible bot check: keep its container out of the layout. */
+  .turnstile {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
   }
   .hp {
     position: absolute;

@@ -13,6 +13,7 @@ const ERRORS: Record<SubmissionError, string> = {
 };
 const TURNSTILE_LOAD_ERROR =
   "The spam check didn't load. Turn off content blockers for this page, then reload.";
+const TURNSTILE_FAILED = "We couldn't confirm this browser. Reload the page and try again.";
 const FALLBACK_ERROR = "Your message didn't send. Check your connection and try again.";
 
 interface TurnstileApi {
@@ -174,13 +175,20 @@ export function initSumat() {
       turnstileToken = t;
       update();
     };
+    // The widget is set to invisible mode in Cloudflare: it checks the browser in the
+    // background while the person types, and never shows anything on the page.
     window.onTurnstileLoad = () =>
       window.turnstile?.render('#turnstile', {
         sitekey: turnstileSiteKey,
-        appearance: 'interaction-only',
-        callback: setToken,
-        'expired-callback': () => setToken(''),
-        'error-callback': () => setToken(''),
+        callback: (t: string) => {
+          error.textContent = '';
+          setToken(t);
+        },
+        'expired-callback': () => resetTurnstile(),
+        'error-callback': () => {
+          setToken('');
+          error.textContent = TURNSTILE_FAILED;
+        },
       });
     const s = document.createElement('script');
     s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
