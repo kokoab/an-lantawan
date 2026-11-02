@@ -1,24 +1,47 @@
 ---
-// Stand-in until the designed homepage is built: the newest stories from every section.
-import StoryList from '../components/stories/StoryList.astro';
+import HomeHero from '../components/home/HomeHero.astro';
+import HomeMoreNews from '../components/home/HomeMoreNews.astro';
+import HomeOpinion from '../components/home/HomeOpinion.astro';
+import HomeSumat from '../components/home/HomeSumat.astro';
 import { db } from '../db/client';
+import { getHomepage } from '../db/queries/home';
+import { getSection } from '../db/queries/stories';
+import { currentPrompt } from '../db/queries/sumat';
 import Site from '../layouts/Site.astro';
-import { loadStoryList } from '../lib/story-list';
 
-const list = await loadStoryList(db, { current: null, sectionIds: [], page: 1 });
-const pageHref = (p: number) => (p === 1 ? '/stories' : `/stories?page=${p}`);
+const [home, prompt, opinionSection] = await Promise.all([
+  getHomepage(db),
+  currentPrompt(db),
+  getSection(db, 'opinion'),
+]);
 ---
 
 <Site title="An Lantawan">
-  <StoryList
-    title="Latest"
-    intro="The newest stories from the official student publication of Leyte Normal University."
-    filters={list.filters}
-    lead={list.lead}
-    grid={list.grid}
-    total={list.total}
-    page={1}
-    pages={list.pages}
-    pageHref={pageHref}
-  />
+  {home.lead && <HomeHero lead={home.lead} minutes={home.leadMinutes} latest={home.latest} />}
+  {prompt && <HomeSumat prompt={prompt.text} letters={home.letters} />}
+  {home.news.length > 0 && <HomeMoreNews stories={home.news} />}
+  {home.opinion.length > 0 && <HomeOpinion intro={opinionSection?.description ?? null} pieces={home.opinion} />}
+  {
+    !home.lead && (
+      <section class="band framed empty">
+        <h1>No stories yet</h1>
+        <p>Stories will show up here as soon as they're published.</p>
+      </section>
+    )
+  }
 </Site>
+
+<style>
+  .empty {
+    padding-block: 96px;
+  }
+  .empty h1 {
+    margin: 0 0 12px;
+    font-size: 48px;
+    letter-spacing: -0.04em;
+  }
+  .empty p {
+    margin: 0;
+    color: var(--grey-600);
+  }
+</style>
