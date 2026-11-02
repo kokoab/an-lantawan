@@ -1,0 +1,221 @@
+---
+import PageHead from '../components/site/PageHead.astro';
+import Pagination from '../components/stories/Pagination.astro';
+import { parsePage, STORIES_PER_PAGE } from '../core/paging';
+import { db } from '../db/client';
+import { type LetterFilter, listLetters } from '../db/queries/letters';
+import { currentPrompt } from '../db/queries/sumat';
+import Site from '../layouts/Site.astro';
+import { formatDate, isoDate } from '../lib/format';
+
+const FILTERS: Array<{ value: LetterFilter; label: string }> = [
+  { value: 'all', label: 'All letters' },
+  { value: 'anonymous', label: 'Anonymous' },
+  { value: 'signed', label: 'Signed' },
+];
+const requested = Astro.url.searchParams.get('show');
+const filter = FILTERS.find((f) => f.value === requested)?.value ?? 'all';
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (!page) return Astro.rewrite('/404');
+
+const [result, prompt] = await Promise.all([
+  listLetters(db, { filter, page, perPage: STORIES_PER_PAGE }),
+  currentPrompt(db),
+]);
+if (page > result.pages) return Astro.rewrite('/404');
+
+const href = (f: LetterFilter, p = 1) => {
+  const u = new URLSearchParams();
+  if (f !== 'all') u.set('show', f);
+  if (p > 1) u.set('page', String(p));
+  const q = u.toString();
+  return q ? `/letters?${q}` : '/letters';
+};
+const dayMonth = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'Asia/Manila',
+});
+---
+
+<Site title="Published letters" description="Letters sent through Sumat that the editorial team chose to publish.">
+  <PageHead
+    title="Published letters"
+    intro="Letters sent through Sumat that the editorial team chose to publish. Anonymous letters stay anonymous."
+    filters={FILTERS.map((f) => ({ label: f.label, href: href(f.value), current: f.value === filter }))}
+    filtersLabel="Show"
+  />
+
+  <section class="band framed letters" aria-label="Letters">
+    {
+      result.total === 0 ? (
+        <div class="empty">
+          <h2>{filter === 'all' ? 'No letters published yet' : 'No letters like this yet'}</h2>
+          <p>
+            When the editorial team publishes a letter sent through Sumat, it shows up here.
+            {filter !== 'all' && (
+              <>
+                {' '}
+                <a href="/letters">See all letters</a>.
+              </>
+            )}
+          </p>
+          <a class="btn btn-sunrise" href="/sumat">
+            Write to Sumat
+          </a>
+        </div>
+      ) : (
+        <>
+          <ul class="grid">
+            {result.letters.map((l) => (
+              <li class="letter">
+                {l.prompt && <p class="prompt">{l.prompt}</p>}
+                <blockquote>“{l.text}”</blockquote>
+                <div class="meta">
+                  <span>{l.signature ?? 'Anonymous'}</span>
+                  {l.publishedAt && <time datetime={isoDate(l.publishedAt)}>{dayMonth.format(l.publishedAt)}</time>}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <Pagination page={page} pages={result.pages} href={(p) => href(filter, p)} />
+        </>
+      )
+    }
+  </section>
+
+  {
+    prompt && (
+      <section class="band write">
+        <div>
+          <p class="write-prompt">{prompt.text}</p>
+          <p>Today’s prompt is open. Anonymous unless you sign it.</p>
+        </div>
+        <a class="btn btn-primary" href="/sumat">
+          Write to Sumat
+        </a>
+      </section>
+    )
+  }
+</Site>
+
+<style>
+  p,
+  h2,
+  blockquote {
+    margin: 0;
+  }
+  .letters {
+    padding-block: 32px 72px;
+  }
+  .grid {
+    display: grid;
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .letter {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .prompt {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  blockquote {
+    font-size: 19px;
+    font-weight: 500;
+    line-height: 27px;
+    letter-spacing: -0.02em;
+  }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--grey-600);
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding-block: 32px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .empty h2 {
+    font-size: 28px;
+    line-height: 32px;
+    letter-spacing: -0.03em;
+  }
+  .empty p {
+    margin-bottom: 8px;
+    color: var(--grey-600);
+  }
+  .empty a:not(.btn) {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+  .write {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+    padding-block: 32px;
+    background: var(--sunrise);
+    border-block: 1px solid var(--ink);
+  }
+  .write p {
+    font-size: 15px;
+    line-height: 22px;
+  }
+  .write .write-prompt {
+    margin-bottom: 4px;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 30px;
+    letter-spacing: -0.03em;
+  }
+  @media (min-width: 768px) {
+    .grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  @media (min-width: 1024px) {
+    .letters {
+      padding-block: 64px 96px;
+    }
+    .grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .letter {
+      padding: 28px;
+    }
+    blockquote {
+      font-size: 20px;
+      line-height: 28px;
+    }
+    .write {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding-block: 48px;
+    }
+    .write .write-prompt {
+      font-size: 36px;
+      line-height: 40px;
+    }
+  }
+</style>
