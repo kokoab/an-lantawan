@@ -48,3 +48,15 @@ export function formatDayRange(from: string, to: string) {
   const sameMonth = from.slice(0, 7) === to.slice(0, 7);
   return `${a} to ${sameMonth ? b.split(' ')[1] : b}`;
 }
+
+const stamp = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'Asia/Manila',
+});
+
+/** "Nov 3, 2026, 2:45 PM", for admin lists. */
+export const formatStamp = (d: Date | null) => (d ? stamp.format(d) : '');

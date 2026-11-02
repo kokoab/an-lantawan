@@ -1,0 +1,44 @@
+/** Small behaviours shared by every admin page. */
+
+// The side menu starts closed on phones, where it sits above the page.
+const menu = document.querySelector<HTMLDetailsElement>('.admin-menu');
+if (menu && window.matchMedia('(max-width: 1023px)').matches) menu.open = false;
+
+// Buttons that archive, delete or overwrite ask first. The question names what will happen.
+document.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest<HTMLElement>('[data-confirm]');
+  if (button && !window.confirm(button.dataset.confirm ?? 'Are you sure?')) {
+    event.preventDefault();
+  }
+});
+
+// Filter menus apply as soon as a choice is made.
+for (const el of document.querySelectorAll<HTMLElement>('[data-autosubmit]')) {
+  if (el instanceof HTMLSelectElement) {
+    el.addEventListener('change', () => el.form?.requestSubmit());
+  }
+}
+
+// A slug field follows its title until someone edits the slug by hand.
+for (const input of document.querySelectorAll<HTMLElement>('[data-slug-from]')) {
+  if (!(input instanceof HTMLInputElement)) continue;
+  const source = document.getElementById(input.dataset.slugFrom ?? '');
+  if (!(source instanceof HTMLInputElement)) continue;
+  let touched = input.value !== '';
+  input.addEventListener('input', () => {
+    touched = input.value !== '';
+  });
+  source.addEventListener('input', () => {
+    if (touched) return;
+    input.value = source.value
+      .normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80)
+      .replace(/-+$/, '');
+  });
+}

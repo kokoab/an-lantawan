@@ -1,0 +1,111 @@
+---
+/**
+ * A labelled form field with its hint and error. The control is chosen by `type`; pass a
+ * slot instead for anything custom. The label, hint and error are tied to the control.
+ */
+interface Option {
+  value: string | number;
+  label: string;
+}
+
+interface Props {
+  name: string;
+  label: string;
+  type?:
+    | 'text'
+    | 'textarea'
+    | 'select'
+    | 'email'
+    | 'url'
+    | 'number'
+    | 'date'
+    | 'datetime-local'
+    | 'color'
+    | 'search';
+  value?: string | number | null;
+  error?: string | null;
+  hint?: string | null;
+  options?: Option[];
+  /** Shown as the first, empty choice of a select. */
+  empty?: string;
+  required?: boolean;
+  rows?: number;
+  maxlength?: number;
+  min?: number | string;
+  max?: number | string;
+  step?: number | string;
+  placeholder?: string;
+  id?: string;
+  /** Fills this slug field from another input as the title is typed. */
+  slugFrom?: string;
+  autocomplete?: string;
+}
+
+const {
+  name,
+  label,
+  type = 'text',
+  value,
+  error,
+  hint,
+  options = [],
+  empty,
+  required = false,
+  rows = 4,
+  maxlength,
+  min,
+  max,
+  step,
+  placeholder,
+  id = `f-${name.replace(/[^a-z0-9]+/gi, '-')}`,
+  slugFrom,
+  autocomplete,
+} = Astro.props;
+const described =
+  [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
+const shown = value ?? '';
+const common = {
+  id,
+  name,
+  required,
+  'aria-invalid': error ? ('true' as const) : undefined,
+  'aria-describedby': described,
+};
+---
+
+<div class="field">
+  <label for={id}>{label}</label>
+  {
+    Astro.slots.has('default') ? (
+      <slot />
+    ) : type === 'textarea' ? (
+      <textarea {...common} rows={rows} maxlength={maxlength} placeholder={placeholder}>
+        {shown}
+      </textarea>
+    ) : type === 'select' ? (
+      <select {...common}>
+        {empty !== undefined && <option value="">{empty}</option>}
+        {options.map((o) => (
+          <option value={o.value} selected={String(o.value) === String(shown)}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <input
+        {...common}
+        type={type}
+        value={shown}
+        maxlength={maxlength}
+        min={min}
+        max={max}
+        step={step}
+        placeholder={placeholder}
+        autocomplete={autocomplete ?? 'off'}
+        data-slug-from={slugFrom}
+      />
+    )
+  }
+  {hint && <p class="hint" id={`${id}-hint`}>{hint}</p>}
+  {error && <p class="field-error" id={`${id}-error`}>{error}</p>}
+</div>

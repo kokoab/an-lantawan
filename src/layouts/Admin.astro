@@ -1,0 +1,147 @@
+---
+/** Every admin page: the side menu, the page title with its actions, and change notices. */
+import { count, eq } from 'drizzle-orm';
+import Torch from '../components/Torch.astro';
+import { db } from '../db/client';
+import { sumatMessages } from '../db/schema';
+import { doneMessage, editorOf } from '../lib/admin';
+import '../styles/site.css';
+import '../styles/admin.css';
+
+interface Props {
+  title: string;
+  /** Which menu entry to mark. */
+  section: string;
+  /** A link back up, shown above the title. */
+  back?: { label: string; href: string };
+}
+
+const { title, section, back } = Astro.props;
+const editor = editorOf(Astro);
+const notice = doneMessage(Astro.url);
+const [{ unread }] = await db
+  .select({ unread: count() })
+  .from(sumatMessages)
+  .where(eq(sumatMessages.status, 'new'));
+
+const MENU = [
+  {
+    label: 'Publishing',
+    items: [
+      { id: 'dashboard', label: 'Overview', href: '/admin' },
+      { id: 'stories', label: 'Stories', href: '/admin/stories' },
+      { id: 'media', label: 'Photos and files', href: '/admin/media' },
+      { id: 'print', label: 'Print issues', href: '/admin/print' },
+      { id: 'people', label: 'People', href: '/admin/people' },
+    ],
+  },
+  {
+    label: 'Readers',
+    items: [
+      { id: 'sumat', label: 'Sumat inbox', href: '/admin/sumat', count: unread },
+      { id: 'prompts', label: 'Sumat prompts', href: '/admin/sumat/prompts' },
+    ],
+  },
+  {
+    label: 'Sportsfest',
+    items: [
+      { id: 'sportsfest', label: 'Sportsfests', href: '/admin/sportsfest' },
+      { id: 'tribus', label: 'Tribus', href: '/admin/sportsfest/tribus' },
+    ],
+  },
+  {
+    label: 'Site',
+    items: [
+      { id: 'settings', label: 'Site text', href: '/admin/settings' },
+      { id: 'sections', label: 'Sections', href: '/admin/sections' },
+      { id: 'menus', label: 'Menus', href: '/admin/menus' },
+      { id: 'redirects', label: 'Redirects', href: '/admin/redirects' },
+      { id: 'editors', label: 'Editors', href: '/admin/editors' },
+      { id: 'activity', label: 'Activity', href: '/admin/activity' },
+    ],
+  },
+];
+const currentLabel = MENU.flatMap((g) => g.items).find((i) => i.id === section)?.label ?? 'Menu';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title} · An Lantawan admin</title>
+  </head>
+  <body class="admin">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="admin-shell">
+      <aside class="admin-side">
+        <a class="admin-brand" href="/admin">
+          <Torch />
+          <span>An Lantawan</span>
+        </a>
+        <details class="admin-menu" open>
+          <summary>{currentLabel}</summary>
+          <nav aria-label="Admin">
+            {
+              MENU.map((g) => (
+                <div class="admin-menu-group">
+                  <p>{g.label}</p>
+                  <ul>
+                    {g.items.map((i) => (
+                      <li>
+                        <a href={i.href} aria-current={i.id === section ? 'page' : undefined}>
+                          {i.label}
+                          {'count' in i && (i.count ?? 0) > 0 && (
+                            <span class="admin-count">
+                              {i.count}
+                              <span class="visually-hidden"> new</span>
+                            </span>
+                          )}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            }
+          </nav>
+        </details>
+        <div class="admin-me">
+          <p>
+            <strong>{editor.name}</strong>
+            <span>{editor.email}</span>
+          </p>
+          <div class="admin-me-links">
+            <a href="/" target="_blank" rel="noopener">View site</a>
+            <form method="post" action="/auth/signout">
+              <button type="submit">Sign out</button>
+            </form>
+          </div>
+        </div>
+      </aside>
+
+      <main class="admin-main" id="main">
+        <header class="admin-head">
+          <div>
+            {back && <a class="admin-back" href={back.href}>{back.label}</a>}
+            <h1>{title}</h1>
+          </div>
+          <div class="admin-actions"><slot name="actions" /></div>
+        </header>
+        {
+          notice && (
+            <p class="admin-notice" role="status">
+              {notice}
+            </p>
+          )
+        }
+        <slot />
+      </main>
+    </div>
+    <script>
+      import '../scripts/admin';
+    </script>
+  </body>
+</html>
