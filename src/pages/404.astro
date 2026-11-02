@@ -1,0 +1,122 @@
+---
+import SearchField from '../components/site/SearchField.astro';
+import StoryCard from '../components/stories/StoryCard.astro';
+import { db } from '../db/client';
+import { listLatest } from '../db/queries/stories';
+import Site from '../layouts/Site.astro';
+
+Astro.response.status = 404;
+const latest = await listLatest(db, 3);
+---
+
+<Site title="Page not found">
+  <section class="band framed not-found">
+    <h1>This page isn’t here.</h1>
+    <p>
+      It may have moved, or the link has a typo. Search for the story, or start from the latest ones
+      below.
+    </p>
+    <div class="search">
+      <SearchField id="not-found-search" size="large" />
+    </div>
+  </section>
+
+  {
+    latest.length > 0 && (
+      <section class="band framed latest" aria-labelledby="latest-title">
+        <h2 id="latest-title">Latest stories</h2>
+        <div class="cards">
+          {latest.map((s) => (
+            <StoryCard story={s} />
+          ))}
+        </div>
+      </section>
+    )
+  }
+</Site>
+
+<style>
+  .not-found {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 64px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+  .not-found p {
+    margin: 0;
+    font-size: 17px;
+    line-height: 26px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .search {
+    padding-top: 4px;
+  }
+  .latest {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 48px 72px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 36px;
+    letter-spacing: -0.04em;
+  }
+  .cards {
+    display: grid;
+    gap: 0 24px;
+  }
+  .cards > :global(*) {
+    padding-block: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+
+  @media (min-width: 768px) {
+    .cards {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .cards > :global(*) {
+      padding-block: 0;
+      border-top: 0;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .not-found {
+      gap: 28px;
+      padding-block: 128px 118px;
+    }
+    h1 {
+      font-size: 104px;
+      line-height: 100px;
+    }
+    .not-found p {
+      width: 640px;
+      font-size: 22px;
+      line-height: 32px;
+    }
+    .search {
+      width: 760px;
+      max-width: 100%;
+      padding-top: 12px;
+    }
+    .latest {
+      gap: 36px;
+      padding-block: 64px 96px;
+    }
+    h2 {
+      font-size: 48px;
+      line-height: 52px;
+    }
+  }
+</style>
