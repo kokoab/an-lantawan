@@ -6,7 +6,13 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!sumat/apps-script", "!worker-configuration.d.ts", "!migrations"]
+    "includes": [
+      "**",
+      "!sumat/apps-script",
+      "!worker-configuration.d.ts",
+      "!migrations",
+      "!**/*.md"
+    ]
   },
   "formatter": {
     "enabled": true,
