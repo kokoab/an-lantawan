@@ -79,9 +79,7 @@ const common = {
     Astro.slots.has('default') ? (
       <slot />
     ) : type === 'textarea' ? (
-      <textarea {...common} rows={rows} maxlength={maxlength} placeholder={placeholder}>
-        {shown}
-      </textarea>
+      <textarea {...common} rows={rows} maxlength={maxlength} placeholder={placeholder} set:text={String(shown)} />
     ) : type === 'select' ? (
       <select {...common}>
         {empty !== undefined && <option value="">{empty}</option>}
