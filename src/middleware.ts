@@ -40,7 +40,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
-  if (!headers.has('Content-Security-Policy')) headers.set('Content-Security-Policy', FALLBACK_CSP);
+  // Pages get their policy from Astro (in production builds); everything else gets the strict one.
+  const isPage = headers.get('Content-Type')?.startsWith('text/html');
+  if (!isPage && !headers.has('Content-Security-Policy')) {
+    headers.set('Content-Security-Policy', FALLBACK_CSP);
+  }
   if (isAdminPage(path) || isAdminApi(path) || path.startsWith('/auth/')) {
     headers.set('Cache-Control', 'no-store');
     headers.set('X-Robots-Tag', 'noindex, nofollow');
