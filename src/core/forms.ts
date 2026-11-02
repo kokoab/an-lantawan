@@ -170,3 +170,16 @@ export function parseForm<S extends z.ZodObject>(
   }
   return { ok: false, errors };
 }
+
+/** A school year such as 2025–2026. Typed with a hyphen or a dash; stored with a dash. */
+export const schoolYear = z
+  .string()
+  .trim()
+  .transform((v, ctx) => {
+    const m = v.match(/^(\d{4})\s*[-–—]\s*(\d{4})$/);
+    if (!m || Number(m[2]) !== Number(m[1]) + 1) {
+      ctx.addIssue({ code: 'custom', message: 'Use a school year like 2025–2026.' });
+      return z.NEVER;
+    }
+    return `${m[1]}–${m[2]}`;
+  });

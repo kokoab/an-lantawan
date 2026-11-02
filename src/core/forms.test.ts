@@ -10,6 +10,7 @@ import {
   optionalText,
   parseForm,
   path,
+  schoolYear,
   slug,
   text,
   toDateTimeInput,
@@ -95,6 +96,16 @@ describe('fields', () => {
     expect(path.parse('/2016/08/old-post')).toBe('/2016/08/old-post');
     for (const bad of ['old', '//evil.com/x', '/a b', '/x?y=1']) {
       expect(path.safeParse(bad).success).toBe(false);
+    }
+  });
+});
+
+describe('schoolYear', () => {
+  it('stores a school year with a dash, whatever was typed', () => {
+    expect(schoolYear.parse('2025-2026')).toBe('2025–2026');
+    expect(schoolYear.parse(' 2025 – 2026 ')).toBe('2025–2026');
+    for (const bad of ['2025', '2025-2027', '2026-2025', 'SY 2025-2026']) {
+      expect(schoolYear.safeParse(bad).success).toBe(false);
     }
   });
 });
