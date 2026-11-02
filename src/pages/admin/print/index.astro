@@ -1,0 +1,58 @@
+---
+import { db } from '../../../db/client';
+import { listAllIssues } from '../../../db/queries/admin/issues';
+import Admin from '../../../layouts/Admin.astro';
+import { formatMonth } from '../../../lib/format';
+import { mediaUrl } from '../../../lib/urls';
+
+const rows = await listAllIssues(db);
+const KIND = { newsletter: 'Newsletter', special: 'Special publication' };
+---
+
+<Admin title="Print issues" section="print">
+  <a slot="actions" class="btn btn-primary" href="/admin/print/new">Add an issue</a>
+  {
+    rows.length === 0 ? (
+      <div class="empty-state">
+        <h2>No print issues yet</h2>
+        <p>Upload a newsletter or special publication as a PDF. It shows up on /print.</p>
+        <a class="btn btn-primary" href="/admin/print/new">Add an issue</a>
+      </div>
+    ) : (
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">Cover</span></th>
+              <th scope="col">Title</th>
+              <th scope="col" class="hide-sm">Kind</th>
+              <th scope="col">Released</th>
+              <th scope="col"><span class="visually-hidden">Status</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td>{r.coverKey ? <img class="thumb" src={mediaUrl(r.coverKey)} alt="" loading="lazy" /> : <span class="thumb" />}</td>
+                <th scope="row">
+                  <a href={`/admin/print/${r.id}`}>{r.title}</a>
+                </th>
+                <td class="muted hide-sm">{KIND[r.kind]}</td>
+                <td class="muted">{formatMonth(r.publishedOn)}</td>
+                <td>{r.archivedAt && <span class="badge">Archived</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</Admin>
+
+<style>
+  .thumb {
+    display: block;
+    width: 36px;
+    height: 48px;
+  }
+</style>

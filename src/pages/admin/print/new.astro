@@ -1,0 +1,30 @@
+---
+import IssueForm from '../../../components/admin/IssueForm.astro';
+import { db } from '../../../db/client';
+import Admin from '../../../layouts/Admin.astro';
+import { editorOf, readFormWithFiles } from '../../../lib/admin';
+import { saveIssue } from '../../../lib/issue-save';
+
+const editor = editorOf(Astro);
+let values: Record<string, unknown> = {
+  kind: 'newsletter',
+  publishedOn: new Date().toISOString().slice(0, 10),
+};
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readFormWithFiles(Astro.request);
+  const saved = await saveIssue(db, form, editor, null);
+  if (saved.ok) return Astro.redirect(`/admin/print/${saved.id}?done=created`, 303);
+  values = form.values;
+  errors = saved.errors;
+  Astro.response.status = 422;
+}
+---
+
+<Admin title="Add a print issue" section="print" back={{ label: 'Print issues', href: '/admin/print' }}>
+  {Object.keys(errors).length > 0 && <p class="admin-error-summary" role="alert">Some fields need fixing. Choose the files again before saving.</p>}
+  <section class="panel">
+    <IssueForm values={values} errors={errors} pdf={null} cover={null} submit="Add issue" />
+  </section>
+</Admin>

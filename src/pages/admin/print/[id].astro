@@ -1,0 +1,79 @@
+---
+import IssueForm from '../../../components/admin/IssueForm.astro';
+import { db } from '../../../db/client';
+import { getIssueById, setIssueArchived } from '../../../db/queries/admin/issues';
+import { getMediaByIds } from '../../../db/queries/admin/media';
+import Admin from '../../../layouts/Admin.astro';
+import {
+  doneRedirect,
+  editorOf,
+  idParam,
+  one,
+  readFormWithFiles,
+  record,
+} from '../../../lib/admin';
+import { saveIssue } from '../../../lib/issue-save';
+
+const editor = editorOf(Astro);
+const id = idParam(Astro.params.id);
+const issue = id ? await getIssueById(db, id) : null;
+if (!issue) return Astro.rewrite('/404');
+const here = `/admin/print/${issue.id}`;
+
+let values: Record<string, unknown> = { ...issue };
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readFormWithFiles(Astro.request);
+  const intent = one(form.values, 'intent');
+  if (intent === 'archive' || intent === 'restore') {
+    await setIssueArchived(db, issue.id, intent === 'archive');
+    await record(editor, {
+      action: intent,
+      entityType: 'issue',
+      entityId: issue.id,
+      summary: `${intent === 'archive' ? 'Archived' : 'Restored'} the print issue ${issue.title}`,
+    });
+    return doneRedirect(Astro, here, intent === 'archive' ? 'archived' : 'restored');
+  }
+  const saved = await saveIssue(db, form, editor, issue);
+  if (saved.ok) return doneRedirect(Astro, here, 'saved');
+  values = { ...issue, ...form.values };
+  errors = saved.errors;
+  Astro.response.status = 422;
+}
+
+const files = await getMediaByIds(
+  db,
+  [issue.pdfId, issue.coverId].filter((x): x is number => x !== null),
+);
+const pdf = files.find((f) => f.id === issue.pdfId) ?? null;
+const cover = files.find((f) => f.id === issue.coverId) ?? null;
+---
+
+<Admin title={issue.title} section="print" back={{ label: 'Print issues', href: '/admin/print' }}>
+  {!issue.archivedAt && <a slot="actions" class="btn btn-secondary" href={`/print/${issue.slug}`} target="_blank" rel="noopener">View on site</a>}
+  <div class="columns main-side">
+    <section class="panel">
+      <IssueForm values={values} errors={errors} pdf={pdf} cover={cover} submit="Save issue" />
+    </section>
+    <section class="panel">
+      <h2>{issue.archivedAt ? 'Archived' : 'Archive'}</h2>
+      <form method="post">
+        <p class="panel-note">
+          {issue.archivedAt ? 'Hidden from /print. Restore it to show it again.' : 'Archiving hides the issue from /print. The PDF is kept.'}
+        </p>
+        <input type="hidden" name="intent" value={issue.archivedAt ? 'restore' : 'archive'} />
+        {
+          issue.archivedAt ? (
+            <button class="btn btn-secondary" type="submit">Restore issue</button>
+          ) : (
+            <button class="btn btn-danger" type="submit" data-confirm={`Archive ${issue.title}? It disappears from /print.`}>
+              Archive issue
+            </button>
+          )
+        }
+      </form>
+    </section>
+  </div>
+</Admin>

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   checkbox,
+  date,
   id,
   optionalId,
   optionalText,
@@ -9,6 +10,7 @@ import {
   text,
   wholeNumber,
 } from '../core/forms';
+import { ISSUE_KINDS } from '../db/schema';
 
 /** The section form. */
 export const sectionForm = z.object({
@@ -54,4 +56,12 @@ export const staffTermForm = z.object({
   schoolYear,
   position: text(80, 'Add the position, like Editor-in-chief.'),
   sort: wholeNumber(0, 999),
+});
+
+export const issueForm = z.object({
+  title: text(160, 'Give the issue a title.'),
+  slug,
+  kind: z.enum(ISSUE_KINDS, { message: 'Choose newsletter or special publication.' }),
+  description: optionalText(600),
+  publishedOn: date,
 });

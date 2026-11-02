@@ -1,0 +1,46 @@
+---
+/** Fields of a print issue: its details, the PDF and an optional cover. */
+import Field from './Field.astro';
+import PhotoField from './PhotoField.astro';
+
+interface Props {
+  values: Record<string, unknown>;
+  errors: Record<string, string>;
+  pdf: { key: string } | null;
+  cover: { key: string } | null;
+  submit: string;
+}
+
+const { values, errors, pdf, cover, submit } = Astro.props;
+const v = (k: string) => (values[k] ?? '') as string;
+---
+
+<form class="form" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="intent" value="save" />
+  <div class="row two">
+    <Field name="title" id="issue-title" label="Title" value={v('title')} error={errors.title} maxlength={160} />
+    <Field name="slug" label="URL name" value={v('slug')} error={errors.slug} hint="The issue is at /print/this-name." slugFrom="issue-title" />
+  </div>
+  <div class="row two">
+    <Field
+      name="kind"
+      label="Kind"
+      type="select"
+      options={[
+        { value: 'newsletter', label: 'Newsletter' },
+        { value: 'special', label: 'Special publication' },
+      ]}
+      value={v('kind') || 'newsletter'}
+      error={errors.kind}
+    />
+    <Field name="publishedOn" label="Released on" type="date" value={v('publishedOn')} error={errors.publishedOn} />
+  </div>
+  <Field name="description" label="Description" type="textarea" rows={3} value={v('description')} error={errors.description} maxlength={600} />
+  <div class="row two">
+    <PhotoField name="pdf" label="The issue (PDF)" current={pdf} error={errors.pdf} pdf removable={false} hint={pdf ? 'Choose a PDF to replace it.' : 'Required. A PDF up to 50 MB.'} />
+    <PhotoField name="cover" label="Cover image" current={cover} error={errors.cover} hint="Optional. Without one, the site shows a designed cover with the title." />
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{submit}</button>
+  </div>
+</form>
