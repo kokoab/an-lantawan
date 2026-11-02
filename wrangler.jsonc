@@ -5,6 +5,11 @@
   "compatibility_date": "2026-10-23",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Public values only. Secrets (GOOGLE_CLIENT_SECRET, TURNSTILE_SECRET) are set with
+  // `wrangler secret put` and never committed.
+  "vars": {
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFwU61vRquUhAg04"
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -18,5 +23,10 @@
       "binding": "MEDIA",
       "bucket_name": "an-lantawan-media"
     }
+  ],
+  // Per-visitor limits, counted in Cloudflare's memory. Nothing about the visitor is stored.
+  "ratelimits": [
+    { "name": "SUMAT_LIMITER", "namespace_id": "1001", "simple": { "limit": 3, "period": 60 } },
+    { "name": "AUTH_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }
   ]
 }
