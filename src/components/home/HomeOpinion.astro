@@ -25,7 +25,7 @@ const byline = (p: Piece) => {
 ---
 
 <div class="wrap">
-  <section class="band opinion" aria-labelledby="opinion-title">
+  <section class="band on-ink opinion" aria-labelledby="opinion-title">
     <div class="head">
       <h2 id="opinion-title">Opinion</h2>
       {intro && <p>{intro}</p>}
@@ -78,13 +78,6 @@ const byline = (p: Piece) => {
     flex-direction: column;
     gap: 40px;
     padding-block: 48px 56px;
-    background-color: var(--ink);
-    background-image:
-      linear-gradient(to right, rgb(255 255 255 / 0.07) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(255 255 255 / 0.07) 1px, transparent 1px);
-    background-size: var(--module) var(--module);
-    background-position: var(--grid-x) 0;
-    color: var(--white);
   }
   p,
   h2,
