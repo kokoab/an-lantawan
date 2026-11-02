@@ -1,0 +1,173 @@
+---
+import MedalCount from '../../components/sportsfest/MedalCount.astro';
+import SportsfestHead from '../../components/sportsfest/SportsfestHead.astro';
+import StatePill from '../../components/sportsfest/StatePill.astro';
+import TribuMark from '../../components/sportsfest/TribuMark.astro';
+import { db } from '../../db/client';
+import { getSportsfest, getTally, listSportsfests } from '../../db/queries/sportsfest';
+import Site from '../../layouts/Site.astro';
+import { formatDayMonth } from '../../lib/format';
+import { sportsfestUrl } from '../../lib/urls';
+
+const years = await listSportsfests(db);
+const rows = await Promise.all(
+  years.map(async (y) => {
+    const sf = await getSportsfest(db, y.year);
+    const tally = sf && y.status !== 'upcoming' ? await getTally(db, sf) : [];
+    const top = tally[0] && tally[0].gold + tally[0].silver + tally[0].bronze > 0 ? tally[0] : null;
+    return { ...y, top, shared: tally.filter((r) => r.rank === 1).length > 1 };
+  }),
+);
+const STATE = { upcoming: 'upcoming', ongoing: 'ongoing', final: 'final' } as const;
+---
+
+<Site title="Past Sportsfests" description="Every Sportsfest An Lantawan has covered." current="sports">
+  <SportsfestHead
+    title="Sportsfest"
+    intro="Every Sportsfest we have covered: the champion, the medal tally and the full results."
+  />
+
+  <section class="band framed years" aria-label="Sportsfests by year">
+    {
+      rows.length === 0 ? (
+        <p class="empty">Sportsfests show up here once the editors add the first one.</p>
+      ) : (
+        <ol>
+          {rows.map((r) => (
+            <li>
+              <a class="year" href={sportsfestUrl(r.year)}>
+                {r.year}
+              </a>
+              <div class="leader">
+                {r.top ? (
+                  <>
+                    <TribuMark tribu={r.top.tribu} size="lg" />
+                    <div>
+                      <span>
+                        {r.status === 'final' ? (r.shared ? 'Co-champion' : 'Champion') : 'Leading'}
+                      </span>
+                      <strong>{r.top.tribu.name}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <span>{r.status === 'upcoming' ? 'Starts' : 'Leading'}</span>
+                    <strong>
+                      {r.status === 'upcoming' && r.startsOn ? formatDayMonth(r.startsOn) : 'No medals yet'}
+                    </strong>
+                  </div>
+                )}
+              </div>
+              <div class="medals">
+                {r.top && (
+                  <>
+                    <MedalCount medal={1} count={r.top.gold} size="md" />
+                    <MedalCount medal={2} count={r.top.silver} size="md" />
+                    <MedalCount medal={3} count={r.top.bronze} size="md" />
+                  </>
+                )}
+              </div>
+              <div class="state">
+                <StatePill state={STATE[r.status]} />
+              </div>
+              <a class="see" href={sportsfestUrl(r.year)}>
+                See results<span class="visually-hidden"> of {r.name}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      )
+    }
+  </section>
+</Site>
+
+<style>
+  .years {
+    padding-block: 48px 72px;
+  }
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 16px;
+    padding-block: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+  li:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .year {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.06em;
+  }
+  .leader {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    grid-column: 1 / -1;
+  }
+  .leader span {
+    display: block;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  .leader strong {
+    font-size: 22px;
+    line-height: 28px;
+    letter-spacing: -0.03em;
+  }
+  .medals {
+    display: flex;
+    gap: 6px;
+  }
+  .state {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .see {
+    justify-self: end;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .empty {
+    margin: 0;
+    padding-block: 24px;
+    border-top: 1px solid var(--grey-300);
+    color: var(--grey-600);
+  }
+  @media (min-width: 1024px) {
+    .years {
+      padding-block: 64px 96px;
+    }
+    li {
+      grid-template-columns: 228px 1fr auto 150px 100px;
+      gap: 24px;
+      padding-block: 28px;
+    }
+    .year {
+      font-size: 80px;
+    }
+    .leader {
+      grid-column: auto;
+    }
+    .leader strong {
+      font-size: 28px;
+      line-height: 32px;
+    }
+    .state {
+      grid-row: auto;
+      grid-column: auto;
+      justify-self: center;
+    }
+  }
+</style>
