@@ -19,7 +19,7 @@ export default defineConfig({
         "img-src 'self' data:",
         "font-src 'self' https://fonts.gstatic.com",
         "connect-src 'self'",
-        'frame-src https://challenges.cloudflare.com',
+        'frame-src https://challenges.cloudflare.com https://www.youtube-nocookie.com https://drive.google.com',
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
