@@ -267,6 +267,10 @@ fieldset > legend {
   font-size: 15px;
   line-height: 22px;
 }
+.admin input[type="file"] {
+  max-width: 100%;
+  min-width: 0;
+}
 .admin input[type="color"] {
   width: 64px;
   padding: 4px;
