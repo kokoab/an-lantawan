@@ -9,6 +9,7 @@ import MenuMobileIcon from '../../assets/icons/menu-mobile.svg';
 import SearchIcon from '../../assets/icons/search.svg';
 import type { Navigation } from '../../db/queries/navigation';
 import Torch from '../Torch.astro';
+import SearchField from './SearchField.astro';
 
 interface Props {
   nav: Navigation;
@@ -73,12 +74,7 @@ const sportsfestLinks = sportsfest
     <div class="overlay" data-menu-close></div>
 
     <div class="panel desktop-panel">
-      <form class="search-field" action="/search" method="get" role="search">
-        <SearchIcon />
-        <label class="visually-hidden" for="menu-search">Search</label>
-        <input id="menu-search" name="q" type="search" placeholder="Search stories, events and issues" />
-        <button class="btn btn-primary" type="submit">Search</button>
-      </form>
+      <SearchField id="menu-search" placeholder="Search stories, events and issues" />
 
       <div class="groups">
         <div class="group">
@@ -114,12 +110,7 @@ const sportsfestLinks = sportsfest
     </div>
 
     <div class="panel phone-panel">
-      <form class="search-field" action="/search" method="get" role="search">
-        <SearchIcon />
-        <label class="visually-hidden" for="menu-search-phone">Search</label>
-        <input id="menu-search-phone" name="q" type="search" placeholder="Search stories" />
-        <button class="btn btn-primary" type="submit">Search</button>
-      </form>
+      <SearchField id="menu-search-phone" />
 
       <div class="phone-sections">
         {nav.sections.map((l) => <a href={l.href}>{l.label}</a>)}
@@ -350,36 +341,7 @@ const sportsfestLinks = sportsfest
     }
   }
 
-  .search-field {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 8px 8px 8px 20px;
-    border: 1px solid var(--grey-300);
-    background: var(--white);
-  }
-  .search-field input {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    padding: 0;
-    background: none;
-    font-size: 18px;
-    line-height: 24px;
-    letter-spacing: -0.01em;
-  }
-  .search-field input::placeholder {
-    color: var(--grey-600);
-  }
-  .search-field input:focus {
-    outline: none;
-  }
-  .search-field:focus-within {
-    border-color: var(--ink);
-  }
-  .phone-panel .search-field {
-    gap: 10px;
-    padding: 6px 6px 6px 16px;
+  .phone-panel :global(.search-field) {
     margin-bottom: 16px;
   }
 

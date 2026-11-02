@@ -1,0 +1,68 @@
+---
+/** Search box used in the menu panels, on the 404 page and on the Search page. */
+import SearchIcon from '../../assets/icons/search.svg';
+
+interface Props {
+  id: string;
+  placeholder?: string;
+  value?: string;
+  /** `large` is the 404 and Search page size on wide screens. */
+  size?: 'medium' | 'large';
+}
+
+const { id, placeholder = 'Search stories', value, size = 'medium' } = Astro.props;
+---
+
+<form class:list={['search-field', size]} action="/search" method="get" role="search">
+  <SearchIcon />
+  <label class="visually-hidden" for={id}>Search</label>
+  <input id={id} name="q" type="search" placeholder={placeholder} value={value} />
+  <button class="btn btn-primary" type="submit">Search</button>
+</form>
+
+<style>
+  .search-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 6px 6px 16px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .search-field :global(svg) {
+    flex: none;
+  }
+  .search-field:focus-within {
+    border-color: var(--ink);
+  }
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 18px;
+    line-height: 24px;
+    letter-spacing: -0.01em;
+  }
+  input::placeholder {
+    color: var(--grey-600);
+  }
+  input:focus {
+    outline: none;
+  }
+  @media (min-width: 1024px) {
+    .search-field {
+      gap: 14px;
+      padding: 8px 8px 8px 20px;
+    }
+    .large {
+      gap: 16px;
+      padding-left: 24px;
+    }
+    .large input {
+      font-size: 20px;
+      line-height: 28px;
+    }
+  }
+</style>
