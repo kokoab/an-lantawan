@@ -1,0 +1,70 @@
+---
+/**
+ * A photo slot in a form: the current photo, a file input to replace it and a box to remove
+ * it. The form needs enctype="multipart/form-data". Uploads go through the same checks as
+ * the photo library.
+ */
+import { mediaUrl } from '../../lib/urls';
+
+interface Props {
+  name: string;
+  label: string;
+  current: { key: string; alt?: string | null } | null;
+  hint?: string;
+  error?: string | null;
+  /** Accept PDFs instead of photos. */
+  pdf?: boolean;
+}
+
+const { name, label, current, hint, error, pdf = false } = Astro.props;
+const id = `f-${name}`;
+---
+
+<div class="field photo-field">
+  <label for={id}>{label}</label>
+  {
+    current && (
+      <div class="current">
+        {pdf ? (
+          <a class="small" href={mediaUrl(current.key)} target="_blank" rel="noopener">
+            {current.key.split('/').pop()}
+          </a>
+        ) : (
+          <img src={mediaUrl(current.key)} alt={current.alt ?? ''} />
+        )}
+        <label class="check small">
+          <input type="checkbox" name={`remove_${name}`} />
+          Remove
+        </label>
+      </div>
+    )
+  }
+  <input
+    id={id}
+    type="file"
+    name={name}
+    accept={pdf ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/gif'}
+    aria-invalid={error ? 'true' : undefined}
+  />
+  <p class="hint">{hint ?? (current ? 'Choose a file to replace it.' : pdf ? 'A PDF up to 50 MB.' : 'A photo up to 10 MB.')}</p>
+  {error && <p class="field-error">{error}</p>}
+</div>
+
+<style>
+  .current {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .current img {
+    width: 96px;
+    height: 96px;
+    border: 1px solid var(--grey-300);
+    object-fit: cover;
+  }
+  input[type='file'] {
+    padding: 8px;
+    border: 1px dashed var(--grey-300);
+    background: var(--white);
+  }
+</style>

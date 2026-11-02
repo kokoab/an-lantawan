@@ -59,3 +59,25 @@ export async function storeUpload(
 export async function removeStored(key: string) {
   await env.MEDIA.delete(key);
 }
+
+/**
+ * The file a form's photo slot ends up with: a newly uploaded one, none if "Remove" was
+ * ticked, or the one it had. A failed upload returns the reason to show beside the field.
+ */
+export async function resolveUpload(
+  db: Db,
+  slot: { name: string; current: number | null; want: MediaKind; alt?: string | null },
+  form: { values: Record<string, string | string[]>; files: Record<string, File> },
+  editorId: number,
+): Promise<{ ok: true; id: number | null } | { ok: false; error: string }> {
+  const file = form.files[slot.name];
+  if (file) {
+    const stored = await storeUpload(db, file, editorId, {
+      want: slot.want,
+      alt: slot.alt ?? null,
+    });
+    return stored.ok ? { ok: true, id: stored.media.id } : stored;
+  }
+  if (form.values[`remove_${slot.name}`] === 'on') return { ok: true, id: null };
+  return { ok: true, id: slot.current };
+}

@@ -23,6 +23,23 @@ export async function readForm(request: Request): Promise<FormValues> {
   return out;
 }
 
+/** A submitted form that may carry files: text values plus each non-empty file by name. */
+export async function readFormWithFiles(request: Request) {
+  const data = await request.formData();
+  const values: FormValues = {};
+  const files: Record<string, File> = {};
+  for (const [name, value] of data) {
+    if (typeof value !== 'string') {
+      if (value.size > 0) files[name] = value;
+      continue;
+    }
+    const prev = values[name];
+    values[name] =
+      prev === undefined ? value : Array.isArray(prev) ? [...prev, value] : [prev, value];
+  }
+  return { values, files };
+}
+
 /** The single value of a field, for reading which button was pressed. */
 export const one = (values: FormValues, name: string) => {
   const v = values[name];
