@@ -1,0 +1,235 @@
+---
+/** The yellow Sumat block: this week's prompt and the newest published letters. */
+import TorchOnYellow from '../../assets/torch-on-yellow.svg';
+import type { StorySummary } from '../../db/queries/stories';
+import { storyUrl } from '../../lib/urls';
+
+interface Props {
+  prompt: string;
+  letters: StorySummary[];
+}
+
+const { prompt, letters } = Astro.props;
+---
+
+<div class="wrap">
+  <section class="band sumat" aria-labelledby="sumat-title">
+    <div class="prompt">
+      <p class="brand">
+        <TorchOnYellow class="mark" />
+        <span class="name">Sumat</span>
+        <span class="tagline">Write to the editorial team</span>
+      </p>
+      <div class="question">
+        <p class="kicker">This week’s prompt</p>
+        <h2 id="sumat-title">{prompt}</h2>
+      </div>
+      <div class="action">
+        <a class="btn btn-primary" href="/sumat">Answer the prompt</a>
+        <p>Anonymous unless you sign it</p>
+      </div>
+    </div>
+
+    {
+      letters.length > 0 && (
+        <div class="letters">
+          <p class="letters-label">Published letters</p>
+          {letters.map((l, i) => (
+            <a class:list={['letter', i > 0 && 'extra']} href={storyUrl(l)}>
+              <span class="quote">“{l.title}”</span>
+              {l.dek && <span class="signed">{l.dek}</span>}
+            </a>
+          ))}
+        </div>
+      )
+    }
+  </section>
+</div>
+
+<style>
+  .wrap {
+    padding-bottom: 32px;
+  }
+  .sumat {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding-block: 28px 34px;
+    border-block: 1px solid var(--ink);
+    background-color: #ffe400;
+    /* The amber graph paper, in front of the sunrise fill. */
+    background-image:
+      linear-gradient(to right, rgb(204 148 0 / 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(204 148 0 / 0.22) 1px, transparent 1px),
+      var(--sunrise);
+    background-size:
+      var(--module) var(--module),
+      var(--module) var(--module),
+      100% 100%;
+    background-position: var(--grid-x) 0;
+  }
+  p,
+  h2 {
+    margin: 0;
+  }
+  .prompt {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand :global(.mark) {
+    width: 21.28px;
+    height: 34px;
+    flex: none;
+  }
+  .name {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 26px;
+    letter-spacing: -0.03em;
+  }
+  .tagline {
+    display: none;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+  .question {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .kicker {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 46px;
+    font-weight: 700;
+    line-height: 46px;
+    letter-spacing: -0.05em;
+    text-wrap: pretty;
+  }
+  .action {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .action .btn {
+    padding-block: 16px;
+  }
+  .action p {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 18px;
+    letter-spacing: -0.01em;
+    text-align: center;
+  }
+  .letters {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .letters-label {
+    display: none;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+  .letter {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px;
+    border: 1px solid var(--ink);
+    background: var(--white);
+  }
+  .letter.extra {
+    display: none;
+  }
+  .quote {
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 28px;
+    letter-spacing: -0.02em;
+  }
+  .signed {
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+
+  @media (min-width: 1024px) {
+    .sumat {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 56px;
+      padding-block: 56px 86px;
+    }
+    .prompt {
+      flex: 1;
+      min-width: 0;
+      gap: 32px;
+    }
+    .brand {
+      gap: 12px;
+    }
+    .brand :global(.mark) {
+      width: 25.03px;
+      height: 40px;
+    }
+    .name {
+      font-size: 26px;
+      line-height: 30px;
+    }
+    .tagline {
+      display: inline;
+    }
+    .question {
+      gap: 14px;
+    }
+    .kicker {
+      font-size: 17px;
+      line-height: 22px;
+    }
+    h2 {
+      font-size: 72px;
+      line-height: 72px;
+    }
+    .action {
+      flex-direction: row;
+      align-items: center;
+      gap: 20px;
+    }
+    .action .btn {
+      padding-block: 14px;
+    }
+    .action p {
+      font-size: 16px;
+      line-height: 20px;
+      text-align: left;
+    }
+    .letters {
+      flex: 0 0 432px;
+    }
+    .letters-label {
+      display: block;
+    }
+    .letter {
+      padding: 28px;
+    }
+    .letter.extra {
+      display: flex;
+    }
+  }
+</style>
