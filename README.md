@@ -51,3 +51,25 @@ Cloudflare builds and deploys every push to `main`. The build settings in the Cl
 - Root directory: `/`
 - Build command: `npm run build`
 - Deploy command: `npx wrangler d1 migrations apply an-lantawan --remote && npx wrangler deploy`
+
+## Security
+
+- **Admin sign-in** is Google only. Nobody gets in unless their email is in the `editors` table and not archived. Archiving an editor signs them out everywhere straight away. Sessions last 30 days and are stored only as a hash.
+- **Every page under `/admin` and every route under `/api/admin/`** needs a signed-in editor. `src/middleware.ts` enforces this, so a new admin page is protected without extra code.
+- **Sumat** uses a hidden trap field, a minimum time on the page, Turnstile, a limit of 3 messages a minute per visitor, and 60 a minute overall.
+- **Sign-in** is limited to 10 attempts a minute per visitor.
+- **Every page** gets a Content-Security-Policy, so only this site's scripts run. Forms only accept posts from this site.
+- **Secrets** (`GOOGLE_CLIENT_SECRET`, `TURNSTILE_SECRET`) are set with `npx wrangler secret put NAME`. Never commit them. Copy `.dev.vars.example` to `.dev.vars` for local work.
+- **Turn on two-factor sign-in** for the Google, Cloudflare and GitHub accounts that own this site.
+
+### Rules that keep the site free
+
+- Stay on the **Workers Free** plan. Its daily request cap is what stops an attack from turning into a bill.
+- Keep **public access off** on the R2 bucket. Files are served only through the site.
+- Only signed-in editors can upload, and uploads have size limits.
+
+### If something goes wrong
+
+- **Bad deploy:** in the Cloudflare dashboard, open Workers & Pages → an-lantawan → Deployments and roll back to the previous version.
+- **Bad data:** restore the database to any minute in the last 30 days with `npx wrangler d1 time-travel restore an-lantawan --timestamp=<time>`.
+- **Lost or stolen account:** archive that editor in the admin, or delete their row in `editors` from the Cloudflare D1 console.
