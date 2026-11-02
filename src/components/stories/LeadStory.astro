@@ -2,7 +2,7 @@
 /** The newest story of a list, shown large above the grid. */
 import type { StorySummary } from '../../db/queries/stories';
 import { formatDate, isoDate } from '../../lib/format';
-import { storyUrl } from '../../lib/urls';
+import { storyLabel, storyUrl } from '../../lib/urls';
 import StoryPhoto from './StoryPhoto.astro';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 }
 
 const { story } = Astro.props;
-const label = story.kind === 'explainer' ? 'Explainer' : story.section.name;
+const label = storyLabel(story);
 const href = storyUrl(story);
 ---
 

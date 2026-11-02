@@ -1,6 +1,6 @@
 ---
 import type { StorySummary } from '../../db/queries/stories';
-import { focalClasses, mediaUrl } from '../../lib/urls';
+import { focalClasses, mediaUrl, showWhole } from '../../lib/urls';
 
 interface Props {
   cover: StorySummary['cover'];
@@ -12,7 +12,7 @@ interface Props {
 const { cover, class: className, eager = false } = Astro.props;
 ---
 
-<div class:list={['photo', className]}>
+<div class:list={['photo', className, cover && showWhole(cover) && 'whole']}>
   {
     cover && (
       <img
