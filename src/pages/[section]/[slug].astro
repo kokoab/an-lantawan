@@ -8,6 +8,7 @@ import Blocks from '../../components/content/Blocks.astro';
 import StoryPhoto from '../../components/stories/StoryPhoto.astro';
 import { readingMinutes } from '../../core/content/reading';
 import { db } from '../../db/client';
+import { findRedirect } from '../../db/queries/redirects';
 import { getSection, listNewest } from '../../db/queries/stories';
 import { getStoryPage } from '../../db/queries/story-page';
 import { currentPrompt } from '../../db/queries/sumat';
@@ -16,7 +17,15 @@ import Site from '../../layouts/Site.astro';
 import { mediaUrl, storyLabel } from '../../lib/urls';
 
 const story = await getStoryPage(db, Astro.params.slug ?? '');
-if (!story) return Astro.rewrite('/404');
+if (!story) {
+  // A renamed story, or a story in a renamed section, answers at its new address.
+  const sectionMoved = await findRedirect(db, `/${Astro.params.section}`);
+  const moved =
+    (await findRedirect(db, Astro.url.pathname)) ??
+    (sectionMoved ? `${sectionMoved}/${Astro.params.slug}` : null);
+  if (moved) return Astro.redirect(moved, 301);
+  return Astro.rewrite('/404');
+}
 // One address per story: an old or mistyped section sends you to the right one.
 if (story.section.slug !== Astro.params.section) {
   return Astro.redirect(`/${story.section.slug}/${story.slug}`, 301);

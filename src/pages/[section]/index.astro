@@ -4,6 +4,7 @@ import StoryList from '../../components/stories/StoryList.astro';
 import { parsePage } from '../../core/paging';
 import { db } from '../../db/client';
 import { getCurrentSportsfest } from '../../db/queries/navigation';
+import { findRedirect } from '../../db/queries/redirects';
 import { getSection } from '../../db/queries/stories';
 import Site from '../../layouts/Site.astro';
 import { loadStoryList } from '../../lib/story-list';
@@ -11,7 +12,11 @@ import { loadStoryList } from '../../lib/story-list';
 const slug = Astro.params.section ?? '';
 const page = parsePage(Astro.url.searchParams.get('page'));
 const section = page ? await getSection(db, slug) : null;
-if (!section || !page) return Astro.rewrite('/404');
+if (!section || !page) {
+  const moved = await findRedirect(db, `/${slug}`);
+  if (moved) return Astro.redirect(`${moved}${Astro.url.search}`, 301);
+  return Astro.rewrite('/404');
+}
 
 const sectionIds = [section.id, ...section.children.map((c) => c.id)];
 const [list, sportsfest] = await Promise.all([
