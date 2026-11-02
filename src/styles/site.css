@@ -21,12 +21,15 @@
      16px outside the content on wider screens. */
   --module: 24px;
   --rail-inset: 3px;
+  /* The phone grid starts 3px in, lined up with the rails. */
+  --grid-x: 3px;
 }
 
 @media (min-width: 768px) {
   :root {
     --module: 32px;
     --rail-inset: calc(var(--gutter) - 16px);
+    --grid-x: 0px;
   }
 }
 
@@ -48,6 +51,7 @@ body {
     linear-gradient(to right, rgb(214 214 211 / 0.13) 1px, transparent 1px),
     linear-gradient(to bottom, rgb(214 214 211 / 0.13) 1px, transparent 1px);
   background-size: var(--module) var(--module);
+  background-position: var(--grid-x) 0;
   color: var(--ink);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
@@ -203,6 +207,11 @@ select {
   object-fit: cover;
   object-position: var(--fx, 50%) var(--fy, 50%);
 }
+/* Graphics with text are shown whole on the grey photo background, never cropped. */
+.photo.whole img {
+  object-fit: contain;
+}
+
 /* Focal point crops, set by focalClasses() in src/lib/urls.ts. */
 .fx-0 {
   --fx: 0%;
