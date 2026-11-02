@@ -8,4 +8,5 @@ export default defineConfig({
   adapter: cloudflare({ imageService: 'compile' }),
   integrations: [svelte()],
   session: false,
+  devToolbar: { enabled: false },
 });
