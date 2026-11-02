@@ -1,0 +1,104 @@
+---
+import SectionForm from '../../../components/admin/SectionForm.astro';
+import { parseForm } from '../../../core/forms';
+import { parentProblem } from '../../../core/sections';
+import { db } from '../../../db/client';
+import {
+  getSectionById,
+  listAllSections,
+  listParentChoices,
+  setSectionArchived,
+  slugTaken,
+  updateSection,
+} from '../../../db/queries/admin/sections';
+import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, idParam, one, readForm, record } from '../../../lib/admin';
+import { sectionForm } from '../../../lib/admin-schemas';
+
+const editor = editorOf(Astro);
+const id = idParam(Astro.params.id);
+const section = id ? await getSectionById(db, id) : null;
+if (!section) return Astro.rewrite('/404');
+const here = `/admin/sections/${section.id}`;
+
+let values: Record<string, unknown> = { ...section };
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const intent = one(form, 'intent');
+  if (intent === 'archive' || intent === 'restore') {
+    await setSectionArchived(db, section.id, intent === 'archive');
+    await record(editor, {
+      action: intent,
+      entityType: 'section',
+      entityId: section.id,
+      summary: `${intent === 'archive' ? 'Archived' : 'Restored'} the ${section.name} section`,
+    });
+    return doneRedirect(Astro, here, intent === 'archive' ? 'archived' : 'restored');
+  }
+  values = form;
+  const parsed = parseForm(sectionForm, form);
+  if (parsed.ok) {
+    const problem = parentProblem(section.id, parsed.data.parentId, await listAllSections(db));
+    if (problem) errors.parentId = problem;
+    if (await slugTaken(db, parsed.data.slug, section.id)) {
+      errors.slug = 'Another section uses this URL name.';
+    }
+    if (!problem && !errors.slug) {
+      await updateSection(db, section.id, parsed.data, section.slug);
+      await record(editor, {
+        action: 'update',
+        entityType: 'section',
+        entityId: section.id,
+        summary: `Edited the ${parsed.data.name} section`,
+      });
+      return doneRedirect(Astro, here, 'saved');
+    }
+  } else errors = parsed.errors;
+  Astro.response.status = 422;
+}
+
+const parents = (await listParentChoices(db)).filter((p) => p.id !== section.id);
+---
+
+<Admin title={section.name} section="sections" back={{ label: 'Sections', href: '/admin/sections' }}>
+  <a slot="actions" class="btn btn-secondary" href={`/${section.slug}`} target="_blank" rel="noopener">
+    View on site
+  </a>
+  <div class="columns main-side">
+    <section class="panel">
+      <SectionForm values={values} errors={errors} parents={parents} submit="Save section" />
+    </section>
+    <section class="panel">
+      <h2>{section.archivedAt ? 'Archived' : 'Archive'}</h2>
+      {
+        section.archivedAt ? (
+          <>
+            <p class="panel-note">This section is hidden from the site. Its stories stay where they are.</p>
+            <form method="post">
+              <input type="hidden" name="intent" value="restore" />
+              <button class="btn btn-secondary" type="submit">Restore section</button>
+            </form>
+          </>
+        ) : (
+          <>
+            <p class="panel-note">
+              Archiving hides the section page and its menu links. Its stories stay published.
+            </p>
+            <form method="post">
+              <input type="hidden" name="intent" value="archive" />
+              <button
+                class="btn btn-danger"
+                type="submit"
+                data-confirm={`Archive the ${section.name} section? Its page and menu links disappear from the site.`}
+              >
+                Archive section
+              </button>
+            </form>
+          </>
+        )
+      }
+    </section>
+  </div>
+</Admin>

@@ -1,0 +1,63 @@
+---
+/** Fields of a section, for adding and editing. */
+import Field from './Field.astro';
+
+interface Props {
+  values: Record<string, unknown>;
+  errors: Record<string, string>;
+  parents: Array<{ id: number; name: string }>;
+  submit: string;
+}
+
+const { values, errors, parents, submit } = Astro.props;
+const v = (k: string) => (values[k] ?? '') as string;
+---
+
+<form class="form" method="post">
+  <input type="hidden" name="intent" value="save" />
+  <div class="row two">
+    <Field name="name" id="section-name" label="Name" value={v('name')} error={errors.name} maxlength={60} />
+    <Field
+      name="slug"
+      label="URL name"
+      value={v('slug')}
+      error={errors.slug}
+      hint="The address, like /news. Changing it later keeps old links working."
+      slugFrom="section-name"
+    />
+  </div>
+  <Field
+    name="description"
+    label="Description"
+    type="textarea"
+    rows={2}
+    value={v('description')}
+    error={errors.description}
+    hint="One line under the section title on its page."
+  />
+  <div class="row two">
+    <Field
+      name="parentId"
+      label="Sits under"
+      type="select"
+      empty="Nothing (top level)"
+      options={parents.map((p) => ({ value: p.id, label: p.name }))}
+      value={v('parentId')}
+      error={errors.parentId}
+      hint="Subsections like Sci-Tech show inside their parent section."
+    />
+    <Field
+      name="sort"
+      label="Order"
+      type="number"
+      min={0}
+      max={999}
+      value={v('sort') || '0'}
+      error={errors.sort}
+      hint="Lower numbers come first."
+    />
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{submit}</button>
+  </div>
+</form>

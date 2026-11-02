@@ -1,0 +1,83 @@
+---
+import SectionForm from '../../../components/admin/SectionForm.astro';
+import { parseForm } from '../../../core/forms';
+import { parentProblem } from '../../../core/sections';
+import { db } from '../../../db/client';
+import {
+  createSection,
+  listAllSections,
+  listParentChoices,
+  slugTaken,
+} from '../../../db/queries/admin/sections';
+import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, readForm, record } from '../../../lib/admin';
+import { sectionForm } from '../../../lib/admin-schemas';
+
+const editor = editorOf(Astro);
+let values: Record<string, unknown> = { sort: 0 };
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  values = form;
+  const parsed = parseForm(sectionForm, form);
+  if (parsed.ok) {
+    const all = await listAllSections(db);
+    const problem = parentProblem(null, parsed.data.parentId, all);
+    if (problem) errors.parentId = problem;
+    if (await slugTaken(db, parsed.data.slug, null))
+      errors.slug = 'Another section uses this URL name.';
+    if (!problem && !errors.slug) {
+      const id = await createSection(db, parsed.data);
+      await record(editor, {
+        action: 'create',
+        entityType: 'section',
+        entityId: id,
+        summary: `Added the ${parsed.data.name} section`,
+      });
+      return doneRedirect(Astro, '/admin/sections', 'created');
+    }
+  } else errors = parsed.errors;
+  Astro.response.status = 422;
+}
+
+const [all, parents] = await Promise.all([listAllSections(db), listParentChoices(db)]);
+const tops = all.filter((s) => s.parentId === null);
+const rows = tops.flatMap((t) => [t, ...all.filter((s) => s.parentId === t.id)]);
+---
+
+<Admin title="Sections" section="sections">
+  <div class="columns main-side">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Section</th>
+            <th scope="col">Address</th>
+            <th scope="col" class="num">Stories</th>
+            <th scope="col"><span class="visually-hidden">Status</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            rows.map((s) => (
+              <tr>
+                <th scope="row">
+                  {s.parentId !== null && <span class="muted" aria-hidden="true">↳ </span>}
+                  <a href={`/admin/sections/${s.id}`}>{s.name}</a>
+                </th>
+                <td class="muted">/{s.slug}</td>
+                <td class="num">{s.stories}</td>
+                <td>{s.archivedAt && <span class="badge">Archived</span>}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <section class="panel">
+      <h2>Add a section</h2>
+      <SectionForm values={values} errors={errors} parents={parents} submit="Add section" />
+    </section>
+  </div>
+</Admin>
