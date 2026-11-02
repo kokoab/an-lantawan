@@ -1,0 +1,402 @@
+---
+import { db } from '../db/client';
+import { getEditorialBoard } from '../db/queries/people';
+import { getSettings } from '../db/queries/settings';
+import Site from '../layouts/Site.astro';
+import { mediaUrl } from '../lib/urls';
+
+type Row = { title: string; text: string };
+type ContactRow = { label: string; text: string };
+
+const [s, board] = await Promise.all([
+  getSettings(db, {
+    'about.headline': '',
+    'about.intro': '',
+    'about.how_we_work': [] as Row[],
+    'about.contact': [] as ContactRow[],
+    'about.join_title': 'Join the staff',
+    'about.join_text': '',
+    'about.join_note': '',
+    'site.tagline': 'Liberating the critical and creative mind.',
+    'site.facebook_url': 'https://www.facebook.com/AnLantawanLNU',
+  }),
+  getEditorialBoard(db),
+]);
+// "2025–2026" with non-breaking joins so the years never split across lines.
+const year = board.year?.replace(/\s*[-–]\s*/, '⁠–⁠');
+---
+
+<Site title="About" description={s['about.intro'] || undefined} current="about">
+  <section class="band framed head">
+    <h1>{s['about.headline']}</h1>
+    <div class="intro">
+      {s['about.intro'] && <p>{s['about.intro']}</p>}
+      <p class="tagline">{s['site.tagline']}</p>
+    </div>
+  </section>
+
+  {
+    s['about.how_we_work'].length > 0 && (
+      <section class="band framed how" aria-labelledby="how-title">
+        <h2 id="how-title">How we work</h2>
+        <dl class="rows">
+          {s['about.how_we_work'].map((r) => (
+            <div class="row">
+              <dt>{r.title}</dt>
+              <dd>{r.text}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    )
+  }
+
+  <section class="band framed board" id="editorial-board" aria-labelledby="board-title">
+    <div class="board-head">
+      <h2 id="board-title">Editorial board</h2>
+      {year && <p>{year}</p>}
+    </div>
+    {
+      board.members.length ? (
+        <ul class="people">
+          {board.members.map((m) => (
+            <li>
+              <a href={`/people/${m.slug}`}>
+                <span class="portrait">{m.photoKey && <img src={mediaUrl(m.photoKey)} alt="" loading="lazy" />}</span>
+                <span class="name">{m.name}</span>
+                <span class="position">{m.position}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="empty">This school year’s editorial board hasn’t been added yet.</p>
+      )
+    }
+  </section>
+
+  <section class="band framed contact" id="contact" aria-labelledby="contact-title">
+    <h2 id="contact-title">Contact</h2>
+    <div>
+      <dl class="contact-rows">
+        {s['about.contact'].map((r) => (
+          <div class="contact-row">
+            <dt>{r.label}</dt>
+            <dd>{r.text}</dd>
+          </div>
+        ))}
+      </dl>
+      <a class="btn btn-sunrise" href="/sumat">Write to Sumat</a>
+    </div>
+  </section>
+
+  <section class="band on-ink join" aria-labelledby="join-title">
+    <div class="join-text">
+      <h2 id="join-title">{s['about.join_title']}</h2>
+      {s['about.join_text'] && <p>{s['about.join_text']}</p>}
+    </div>
+    <div class="join-action">
+      {s['about.join_note'] && <p>{s['about.join_note']}</p>}
+      <a class="btn btn-sunrise" href={s['site.facebook_url']} target="_blank" rel="noopener">Follow us on Facebook</a>
+    </div>
+  </section>
+</Site>
+
+<style>
+  h1,
+  h2,
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+  h2 {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 40px;
+    letter-spacing: -0.04em;
+  }
+
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-block: 56px 64px;
+  }
+  h1 {
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.05em;
+    text-wrap: pretty;
+  }
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-size: 17px;
+    line-height: 26px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .tagline {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .how {
+    padding-block: 56px 64px;
+  }
+  .how h2 {
+    margin-bottom: 24px;
+  }
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-block: 24px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .row:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .row dt {
+    font-size: 21px;
+    font-weight: 600;
+    line-height: 28px;
+    letter-spacing: -0.02em;
+  }
+  .row dd {
+    font-size: 17px;
+    line-height: 27px;
+  }
+
+  .board {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    padding-block: 56px 64px;
+  }
+  .board-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+  }
+  .board-head p {
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 22px;
+    color: var(--grey-600);
+    white-space: nowrap;
+  }
+  .people {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 32px 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .people a {
+    display: flex;
+    flex-direction: column;
+  }
+  .portrait {
+    display: block;
+    aspect-ratio: 125 / 168;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    overflow: hidden;
+  }
+  .portrait img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .name {
+    padding-top: 16px;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 24px;
+    letter-spacing: -0.01em;
+  }
+  .people a:hover .name {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .position {
+    margin-top: 4px;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--grey-600);
+  }
+  .empty {
+    padding: 32px 0;
+    border-top: 1px solid var(--grey-300);
+    color: var(--grey-600);
+  }
+
+  .contact {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-block: 56px 72px;
+  }
+  .contact-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-block: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .contact-row:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .contact-row dt {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    color: var(--grey-600);
+  }
+  .contact-row dd {
+    font-size: 18px;
+    line-height: 28px;
+  }
+  .contact .btn {
+    margin-top: 28px;
+  }
+
+  .join {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    padding-block: 64px 72px;
+  }
+  .join-text {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .join h2 {
+    font-size: 48px;
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+  .join-text p {
+    font-size: 17px;
+    line-height: 27px;
+    color: var(--grey-300);
+  }
+  .join-action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .join-action p {
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--grey-300);
+  }
+
+  @media (min-width: 768px) {
+    .people {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 48px 32px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    h2 {
+      font-size: 48px;
+      line-height: 52px;
+    }
+    .head {
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 48px;
+      padding-block: 96px 120px;
+    }
+    h1 {
+      flex: 0 0 calc((100% - 48px) * 768 / 1168);
+      font-size: 72px;
+      line-height: 74px;
+    }
+    .intro {
+      flex: 1;
+      font-size: 18px;
+      line-height: 27px;
+    }
+    .how {
+      padding-block: 96px 103px;
+    }
+    .how h2 {
+      margin-bottom: 32px;
+    }
+    .row {
+      flex-direction: row;
+      gap: 48px;
+      padding-block: 28px;
+    }
+    .row dt {
+      flex: 0 0 calc((100% - 48px) * 432 / 1168);
+      font-size: 24px;
+      line-height: 30px;
+    }
+    .row dd {
+      flex: 1;
+      font-size: 20px;
+      line-height: 32px;
+    }
+    .board {
+      gap: 40px;
+      padding-block: 96px 110px;
+    }
+    .people {
+      grid-template-columns: repeat(6, 1fr);
+    }
+    .contact {
+      flex-direction: row;
+      gap: 48px;
+      padding-block: 96px 126px;
+    }
+    .contact > h2 {
+      flex: 0 0 calc((100% - 48px) * 432 / 1168);
+    }
+    .contact > div {
+      flex: 1;
+    }
+    .contact-row {
+      flex-direction: row;
+      gap: 48px;
+    }
+    .contact-row dt {
+      flex: 0 0 192px;
+    }
+    .contact-row dd {
+      font-size: 20px;
+      line-height: 30px;
+    }
+    .join {
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 48px;
+      padding-block: 96px 116px;
+    }
+    .join-text {
+      flex: 0 0 calc((100% - 48px) * 768 / 1168);
+    }
+    .join h2 {
+      font-size: 88px;
+      line-height: 88px;
+    }
+    .join-text p {
+      font-size: 20px;
+      line-height: 32px;
+    }
+    .join-action {
+      flex: 1;
+    }
+  }
+</style>
