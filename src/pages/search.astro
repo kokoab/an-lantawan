@@ -1,0 +1,249 @@
+---
+import SearchField from '../components/site/SearchField.astro';
+import Pagination from '../components/stories/Pagination.astro';
+import StoryCard from '../components/stories/StoryCard.astro';
+import { parsePage, STORIES_PER_PAGE } from '../core/paging';
+import { MAX_QUERY_LENGTH, shorterSearch, toFtsQuery } from '../core/search/query';
+import { db } from '../db/client';
+import { getSection, listLatest, listTopSections, searchStories } from '../db/queries/stories';
+import Site from '../layouts/Site.astro';
+
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, MAX_QUERY_LENGTH);
+const sectionSlug = Astro.url.searchParams.get('section');
+const page = parsePage(Astro.url.searchParams.get('page')) ?? 1;
+const fts = toFtsQuery(q);
+
+const [sections, section] = await Promise.all([
+  listTopSections(db),
+  sectionSlug ? getSection(db, sectionSlug) : null,
+]);
+const sectionIds = section ? [section.id, ...section.children.map((c) => c.id)] : [];
+const result = fts
+  ? await searchStories(db, { fts, sectionIds, page, perPage: STORIES_PER_PAGE })
+  : null;
+const latest = !result || result.total === 0 ? await listLatest(db, 3) : [];
+
+const href = (params: { section?: string | null; page?: number }) => {
+  const u = new URLSearchParams({ q });
+  if (params.section) u.set('section', params.section);
+  if (params.page && params.page > 1) u.set('page', String(params.page));
+  return `/search?${u}`;
+};
+const shorter = shorterSearch(q);
+const count = result?.total ?? 0;
+// Search pages are for people, not search engines.
+Astro.response.headers.set('X-Robots-Tag', 'noindex');
+---
+
+<Site title={q ? `Search: ${q}` : 'Search'}>
+  <section class="band framed head">
+    <h1 class="visually-hidden">Search</h1>
+    <SearchField id="search-page" size="large" value={q} placeholder="Search stories" />
+    {
+      result && count > 0 && (
+        <>
+          <p class="count">
+            {count} {count === 1 ? 'story matches' : 'stories match'} “{q}”
+            {section && ` in ${section.name}`}
+          </p>
+          <nav class="filters" aria-label="Filter by section">
+            <a
+              class:list={['btn', section ? 'btn-secondary' : 'btn-primary']}
+              href={href({})}
+              aria-current={section ? undefined : 'page'}
+            >
+              All stories
+            </a>
+            {sections.map((s) => (
+              <a
+                class:list={['btn', s.slug === section?.slug ? 'btn-primary' : 'btn-secondary']}
+                href={href({ section: s.slug })}
+                aria-current={s.slug === section?.slug ? 'page' : undefined}
+              >
+                {s.name}
+              </a>
+            ))}
+          </nav>
+        </>
+      )
+    }
+    {!q && <p class="count">Search every story An Lantawan has published since 2015.</p>}
+  </section>
+
+  {
+    result && count > 0 && (
+      <section class="band framed results" aria-label="Results">
+        <div class="grid">
+          {result.stories.map((s) => (
+            <StoryCard story={s} />
+          ))}
+        </div>
+        <Pagination page={page} pages={result.pages} href={(p) => href({ section: section?.slug, page: p })} />
+      </section>
+    )
+  }
+
+  {
+    result && count === 0 && (
+      <section class="band framed none">
+        <h2>
+          No stories match “{q}”{section && ` in ${section.name}`}
+        </h2>
+        <p>
+          Check the spelling, or try fewer words.
+          {shorter && (
+            <>
+              {' '}
+              A shorter search like <a href={`/search?q=${encodeURIComponent(shorter)}`}>“{shorter}”</a> finds more.
+            </>
+          )}{' '}
+          You can also browse a section.
+        </p>
+        <nav class="filters" aria-label="Sections">
+          {sections.map((s) => (
+            <a class="btn btn-secondary" href={`/${s.slug}`}>
+              {s.name}
+            </a>
+          ))}
+          <a class="btn btn-secondary" href="/print">
+            Print issues
+          </a>
+        </nav>
+      </section>
+    )
+  }
+
+  {
+    latest.length > 0 && (
+      <section class="band framed latest" aria-labelledby="latest-title">
+        <h2 id="latest-title">Latest stories</h2>
+        <div class="grid">
+          {latest.map((s) => (
+            <StoryCard story={s} />
+          ))}
+        </div>
+      </section>
+    )
+  }
+</Site>
+
+<style>
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 40px 48px;
+  }
+  .head :global(.search-field) {
+    border-color: var(--ink);
+  }
+  .head :global(.search-field input) {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 30px;
+    letter-spacing: -0.03em;
+  }
+  .count {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 22px;
+    color: var(--grey-600);
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .results,
+  .latest {
+    padding-block: 32px 72px;
+  }
+  .grid {
+    display: grid;
+    column-gap: 24px;
+    overflow: hidden;
+  }
+  .grid > :global(*) {
+    position: relative;
+    padding-block: 20px;
+  }
+  .grid > :global(*)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -24px;
+    right: -24px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .none {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-block: 48px 56px;
+  }
+  .none h2,
+  .latest h2 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 36px;
+    letter-spacing: -0.04em;
+  }
+  .latest h2 {
+    margin-bottom: 16px;
+  }
+  .none p {
+    max-width: 640px;
+    margin: 0 0 8px;
+    font-size: 17px;
+    line-height: 26px;
+    color: var(--grey-600);
+  }
+  .none p a {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  @media (min-width: 768px) {
+    .grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .grid > :global(*) {
+      padding-block: 32px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .head {
+      gap: 28px;
+      padding-block: 96px 94px;
+    }
+    .head :global(.search-field input) {
+      font-size: 32px;
+      line-height: 40px;
+    }
+    .count {
+      font-size: 17px;
+    }
+    .grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .results,
+    .latest {
+      padding-block: 32px 128px;
+    }
+    .none {
+      padding-block: 64px 72px;
+    }
+    .none h2,
+    .latest h2 {
+      font-size: 56px;
+      line-height: 58px;
+    }
+    .none p {
+      font-size: 18px;
+      line-height: 28px;
+    }
+  }
+</style>
