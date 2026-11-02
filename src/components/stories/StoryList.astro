@@ -1,0 +1,228 @@
+---
+/** Section head, lead story, story grid and pagination: News, Opinion, Features, Sports and All stories. */
+import type { StorySummary } from '../../db/queries/stories';
+import LeadStory from './LeadStory.astro';
+import Pagination from './Pagination.astro';
+import StoryCard from './StoryCard.astro';
+
+interface Props {
+  title: string;
+  intro: string | null;
+  /** The filter row: All stories plus each top-level section. */
+  filters: Array<{ label: string; href: string; current: boolean }>;
+  lead: StorySummary | null;
+  grid: StorySummary[];
+  total: number;
+  page: number;
+  pages: number;
+  pageHref: (page: number) => string;
+}
+
+const { title, intro, filters, lead, grid, total, page, pages, pageHref } = Astro.props;
+const shown = (lead ? 1 : 0) + grid.length;
+---
+
+<section class="band framed head">
+  <div class="title-row">
+    <h1>{title}</h1>
+    {intro && <p class="intro">{intro}</p>}
+  </div>
+  <nav class="filters" aria-label="Sections">
+    {
+      filters.map((f) => (
+        <a
+          class:list={['btn', f.current ? 'btn-primary' : 'btn-secondary']}
+          href={f.href}
+          aria-current={f.current ? 'page' : undefined}
+        >
+          {f.label}
+        </a>
+      ))
+    }
+  </nav>
+</section>
+
+<slot name="after-head" />
+
+{lead && <LeadStory story={lead} />}
+
+{
+  total === 0 ? (
+    <section class="band framed stories">
+      <div class="empty">
+        <h2>No stories here yet</h2>
+        <p>New stories in {title} will show up here as soon as they're published.</p>
+        <a class="btn btn-secondary" href="/">Go to the homepage</a>
+      </div>
+    </section>
+  ) : (
+    grid.length > 0 && (
+      <section class="band framed stories" aria-labelledby="stories-title">
+        <div class="stories-head">
+          <h2 id="stories-title">{page === 1 ? 'Earlier stories' : `Page ${page}`}</h2>
+          <p>
+            Showing {shown} of {total}
+          </p>
+        </div>
+        <div class="grid">
+          {grid.map((s) => (
+            <StoryCard story={s} />
+          ))}
+        </div>
+        <Pagination page={page} pages={pages} href={pageHref} />
+      </section>
+    )
+  )
+}
+
+<style>
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 48px 62px;
+  }
+  .title-row {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 64px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+  .intro {
+    margin: 0;
+    font-size: 16px;
+    line-height: 24px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: calc(-1 * var(--gutter));
+    padding-inline: var(--gutter);
+  }
+  .filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stories {
+    padding-block: 48px 96px;
+  }
+  .stories-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding-bottom: 24px;
+  }
+  .stories-head h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 28px;
+    letter-spacing: -0.03em;
+  }
+  .stories-head p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+    white-space: nowrap;
+  }
+  /* Rows are separated by a rule; lines run into the gaps and are clipped at the edges. */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    column-gap: 24px;
+    overflow: hidden;
+  }
+  .grid > :global(*) {
+    position: relative;
+    padding-block: 20px;
+  }
+  .grid > :global(*)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -24px;
+    right: -24px;
+    border-top: 1px solid var(--grey-300);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding-block: 32px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .empty h2 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 28px;
+    letter-spacing: -0.03em;
+  }
+  .empty p {
+    margin: 0 0 8px;
+    color: var(--grey-600);
+  }
+
+  @media (min-width: 768px) {
+    .grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .grid > :global(*) {
+      padding-block: 32px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .head {
+      gap: 40px;
+      padding-block: 96px 66px;
+    }
+    .title-row {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 48px;
+    }
+    h1 {
+      font-size: 104px;
+      line-height: 100px;
+    }
+    .intro {
+      width: 380px;
+      font-size: 17px;
+      line-height: 26px;
+    }
+    .filters {
+      margin-inline: 0;
+      padding-inline: 0;
+    }
+    .stories {
+      padding-block: 64px 128px;
+    }
+    .stories-head h2 {
+      font-size: 28px;
+      line-height: 32px;
+    }
+    .stories-head p {
+      font-size: 15px;
+    }
+    .grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+</style>
