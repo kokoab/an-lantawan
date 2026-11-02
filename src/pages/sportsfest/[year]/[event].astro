@@ -5,7 +5,14 @@ import MatchCard from '../../../components/sportsfest/MatchCard.astro';
 import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro';
 import TribuChip from '../../../components/sportsfest/TribuChip.astro';
 import TribuMark from '../../../components/sportsfest/TribuMark.astro';
-import { formatName, manilaDay, ROW_STATE_LABEL, rowState } from '../../../core/sportsfest/display';
+import {
+  formatName,
+  formatScore,
+  manilaDay,
+  pointsRuleText,
+  ROW_STATE_LABEL,
+  rowState,
+} from '../../../core/sportsfest/display';
 import { standings } from '../../../core/sportsfest/standings';
 import { db } from '../../../db/client';
 import { getEvent, listCoverage } from '../../../db/queries/sportsfest';
