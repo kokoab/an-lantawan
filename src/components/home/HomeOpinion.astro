@@ -27,8 +27,11 @@ const byline = (p: Piece) => {
 <div class="wrap">
   <section class="band on-ink opinion" aria-labelledby="opinion-title">
     <div class="head">
-      <h2 id="opinion-title">Opinion</h2>
-      {intro && <p>{intro}</p>}
+      <div class="head-text">
+        <h2 id="opinion-title">Opinion</h2>
+        {intro && <p>{intro}</p>}
+      </div>
+      <a class="btn all" href="/opinion">All opinion</a>
     </div>
 
     {
@@ -65,7 +68,6 @@ const byline = (p: Piece) => {
       )
     }
 
-    <a class="btn all" href="/opinion">All opinion</a>
   </section>
 </div>
 
@@ -85,6 +87,12 @@ const byline = (p: Piece) => {
     margin: 0;
   }
   .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .head-text {
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -172,7 +180,7 @@ const byline = (p: Piece) => {
     color: var(--grey-300);
   }
   .all {
-    align-self: stretch;
+    flex: none;
     background: var(--white);
     color: var(--ink);
   }
@@ -186,9 +194,7 @@ const byline = (p: Piece) => {
       padding-block: 56px 79px;
     }
     .head {
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: flex-end;
+      align-items: center;
       gap: 48px;
     }
     h2 {
@@ -196,7 +202,7 @@ const byline = (p: Piece) => {
       line-height: 100px;
     }
     .head p {
-      width: 380px;
+      max-width: 560px;
       font-size: 17px;
       line-height: 26px;
     }
@@ -234,9 +240,6 @@ const byline = (p: Piece) => {
     .item-title {
       font-size: 24px;
       line-height: 30px;
-    }
-    .all {
-      align-self: flex-start;
     }
   }
 </style>

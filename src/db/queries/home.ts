@@ -25,16 +25,19 @@ export async function getHomepage(db: Db) {
   const latest = newest.filter((s) => s.id !== lead?.id).slice(0, 5);
   const shown = [lead, ...latest].filter(Boolean).map((s) => (s as { id: number }).id);
 
-  const [newsIds, opinionIds] = await Promise.all([
-    sectionIds(db, 'news'),
+  // The next nine stories after the lead and Latest, then opinion not already shown above.
+  const [more, opinionIds] = await Promise.all([
+    listNewest(db, { exclude: shown, limit: 9 }),
     sectionIds(db, 'opinion'),
   ]);
-  const [news, opinion, letters, leadBody] = await Promise.all([
-    newsIds.length
-      ? listNewest(db, { where: inArray(stories.sectionId, newsIds), exclude: shown, limit: 2 })
-      : [],
+  const shownAbove = [...shown, ...more.map((s) => s.id)];
+  const [opinion, letters, leadBody] = await Promise.all([
     opinionIds.length
-      ? listNewest(db, { where: inArray(stories.sectionId, opinionIds), exclude: shown, limit: 4 })
+      ? listNewest(db, {
+          where: inArray(stories.sectionId, opinionIds),
+          exclude: shownAbove,
+          limit: 4,
+        })
       : [],
     listNewest(db, { where: eq(stories.kind, 'letter'), limit: 2 }),
     lead ? getBody(db, lead.id) : null,
@@ -48,7 +51,7 @@ export async function getHomepage(db: Db) {
     lead,
     leadMinutes: leadBody ? readingMinutes(leadBody as Doc) : null,
     latest,
-    news,
+    more,
     opinion: opinion.map((s) => ({ ...s, writers: writers.get(s.id) ?? [] })),
     letters,
   };

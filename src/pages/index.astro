@@ -19,7 +19,7 @@ const [home, prompt, opinionSection] = await Promise.all([
 <Site title="An Lantawan">
   {home.lead && <HomeHero lead={home.lead} minutes={home.leadMinutes} latest={home.latest} />}
   {prompt && <HomeSumat prompt={prompt.text} letters={home.letters} />}
-  {home.news.length > 0 && <HomeMoreNews stories={home.news} />}
+  {home.more.length > 0 && <HomeMoreNews stories={home.more} />}
   {home.opinion.length > 0 && <HomeOpinion intro={opinionSection?.description ?? null} pieces={home.opinion} />}
   {
     !home.lead && (

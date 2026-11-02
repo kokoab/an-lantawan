@@ -215,3 +215,43 @@ export async function searchStories(
     .offset((page - 1) * perPage);
   return { stories: rows.map(toSummary), total, pages: Math.max(1, Math.ceil(total / perPage)) };
 }
+
+/** Stories a person is credited on, newest first, and the sections they appear in. */
+export async function listStoriesBy(
+  db: Db,
+  personId: number,
+  { page, perPage }: { page: number; perPage: number },
+) {
+  const credited = sql`${stories.id} IN (SELECT ${storyAuthors.storyId} FROM ${storyAuthors} WHERE ${storyAuthors.personId} = ${personId})`;
+  const where = and(published, credited);
+  const [{ total }] = await db.select({ total: count() }).from(stories).where(where);
+  const [rows, sectionRows, first] = await Promise.all([
+    db
+      .select(summaryColumns)
+      .from(stories)
+      .innerJoin(sections, eq(sections.id, stories.sectionId))
+      .leftJoin(media, eq(media.id, stories.coverId))
+      .where(where)
+      .orderBy(desc(stories.publishedAt), desc(stories.id))
+      .limit(perPage)
+      .offset((page - 1) * perPage),
+    db
+      .selectDistinct({ name: sections.name })
+      .from(stories)
+      .innerJoin(sections, eq(sections.id, stories.sectionId))
+      .where(where),
+    db
+      .select({ at: stories.publishedAt })
+      .from(stories)
+      .where(where)
+      .orderBy(stories.publishedAt)
+      .limit(1),
+  ]);
+  return {
+    stories: rows.map(toSummary),
+    total,
+    pages: Math.max(1, Math.ceil(total / perPage)),
+    sections: sectionRows.map((s) => s.name),
+    firstAt: first[0]?.at ?? null,
+  };
+}

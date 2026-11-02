@@ -7,15 +7,16 @@ interface Props {
 }
 
 const { stories } = Astro.props;
+// Newest stories after the lead and the Latest list, three rows of three.
 ---
 
-<section class="band framed more" aria-labelledby="more-news-title">
+<section class="band framed more" aria-labelledby="more-title">
   <div class="head">
-    <h2 id="more-news-title">More news</h2>
-    <a class="btn btn-secondary" href="/news">All news</a>
+    <h2 id="more-title">More stories</h2>
+    <a class="btn btn-secondary" href="/stories">All stories</a>
   </div>
   <div class="cards">
-    {stories.map((s) => <StoryCard story={s} variant="card" />)}
+    {stories.map((s) => <StoryCard story={s} />)}
   </div>
 </section>
 
@@ -39,13 +40,30 @@ const { stories } = Astro.props;
     line-height: 40px;
     letter-spacing: -0.04em;
   }
+  /* Rows are ruled like the section pages; lines run into the gaps and are clipped. */
   .cards {
     display: grid;
-    gap: 40px 24px;
+    column-gap: 24px;
+    overflow: hidden;
+  }
+  .cards > :global(*) {
+    position: relative;
+    padding-block: 20px;
+  }
+  .cards > :global(*)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -24px;
+    right: -24px;
+    border-top: 1px solid var(--grey-300);
   }
   @media (min-width: 768px) {
     .cards {
       grid-template-columns: repeat(2, 1fr);
+    }
+    .cards > :global(*) {
+      padding-block: 32px;
     }
   }
   @media (min-width: 1024px) {
@@ -57,8 +75,8 @@ const { stories } = Astro.props;
       font-size: 56px;
       line-height: 58px;
     }
-    .cards :global(.card-photo) {
-      aspect-ratio: 592 / 340;
+    .cards {
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 </style>
