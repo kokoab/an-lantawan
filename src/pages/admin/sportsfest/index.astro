@@ -1,0 +1,96 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import { parseForm } from '../../../core/forms';
+import { db } from '../../../db/client';
+import {
+  createSportsfest,
+  listSportsfestsAdmin,
+  yearTaken,
+} from '../../../db/queries/admin/sportsfest';
+import Admin from '../../../layouts/Admin.astro';
+import { editorOf, readForm, record } from '../../../lib/admin';
+import { sportsfestForm } from '../../../lib/admin-schemas';
+import { formatDayRange } from '../../../lib/format';
+
+const editor = editorOf(Astro);
+const nextYear = new Date().getFullYear() + (new Date().getMonth() >= 6 ? 1 : 0);
+let values: Record<string, unknown> = {
+  year: String(nextYear),
+  name: `Sportsfest ${nextYear}`,
+  status: 'upcoming',
+};
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  values = form;
+  const parsed = parseForm(sportsfestForm, form);
+  if (parsed.ok) {
+    const { tribuIds: _, ...input } = parsed.data;
+    if (await yearTaken(db, input.year, null))
+      errors.year = 'There is already a Sportsfest that year.';
+    else if (input.startsOn && input.endsOn && input.endsOn < input.startsOn)
+      errors.endsOn = 'End it on or after the first day.';
+    else {
+      await createSportsfest(db, input);
+      await record(editor, {
+        action: 'create',
+        entityType: 'sportsfest',
+        summary: `Added ${input.name}`,
+      });
+      return Astro.redirect(`/admin/sportsfest/${input.year}?done=created`, 303);
+    }
+  } else errors = parsed.errors;
+  Astro.response.status = 422;
+}
+
+const rows = await listSportsfestsAdmin(db);
+const STATUS = { upcoming: 'Coming up', ongoing: 'Ongoing', final: 'Final' };
+const v = (k: string) => (values[k] ?? '') as string;
+---
+
+<Admin title="Sportsfests" section="sportsfest">
+  <a slot="actions" class="btn btn-secondary" href="/admin/sportsfest/tribus">Tribus</a>
+  <div class="columns main-side">
+    {
+      rows.length === 0 ? (
+        <div class="empty-state">
+          <h2>No Sportsfest yet</h2>
+          <p>Add the next one on the right. Its hub, tally and events appear at /sportsfest.</p>
+        </div>
+      ) : (
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th scope="col">Sportsfest</th><th scope="col" class="hide-sm">Dates</th><th scope="col" class="num">Events</th><th scope="col">Status</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr>
+                  <th scope="row"><a href={`/admin/sportsfest/${r.year}`}>{r.name}</a></th>
+                  <td class="muted hide-sm">{r.startsOn && r.endsOn ? formatDayRange(r.startsOn, r.endsOn) : 'No dates yet'}</td>
+                  <td class="num">{r.events}</td>
+                  <td><span class:list={['badge', { sun: r.status === 'ongoing', ink: r.status === 'final' }]}>{STATUS[r.status]}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    <form class="panel form" method="post">
+      <h2>Add a Sportsfest</h2>
+      <p class="panel-note">Every current tribu takes part. You can change that next.</p>
+      <div class="row two">
+        <Field name="year" label="Year" type="number" min={2000} max={2100} value={v('year')} error={errors.year} />
+        <Field name="status" label="Status" type="select" options={[{ value: 'upcoming', label: 'Coming up' }, { value: 'ongoing', label: 'Ongoing' }, { value: 'final', label: 'Final' }]} value={v('status')} error={errors.status} />
+      </div>
+      <Field name="name" label="Name" value={v('name')} error={errors.name} maxlength={80} />
+      <div class="row two">
+        <Field name="startsOn" label="First day" type="date" value={v('startsOn')} error={errors.startsOn} />
+        <Field name="endsOn" label="Last day" type="date" value={v('endsOn')} error={errors.endsOn} />
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Add Sportsfest</button></div>
+    </form>
+  </div>
+</Admin>

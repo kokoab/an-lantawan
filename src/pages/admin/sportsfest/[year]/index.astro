@@ -1,0 +1,214 @@
+---
+import Field from '../../../../components/admin/Field.astro';
+import TribuMark from '../../../../components/sportsfest/TribuMark.astro';
+import { parseForm } from '../../../../core/forms';
+import { db } from '../../../../db/client';
+import {
+  createEvent,
+  eventSlugTaken,
+  getSportsfestRow,
+  listAllTribus,
+  listEventsAdmin,
+  tribusWithResults,
+  updateSportsfest,
+  yearTaken,
+} from '../../../../db/queries/admin/sportsfest';
+import Admin from '../../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readForm, record } from '../../../../lib/admin';
+import { eventForm, sportsfestForm } from '../../../../lib/admin-schemas';
+import { formatStamp } from '../../../../lib/format';
+
+const editor = editorOf(Astro);
+const year = /^\d{4}$/.test(Astro.params.year ?? '') ? Number(Astro.params.year) : null;
+const sf = year ? await getSportsfestRow(db, year) : null;
+if (!sf) return Astro.rewrite('/404');
+const here = `/admin/sportsfest/${sf.year}`;
+
+const [tribus, locked] = await Promise.all([listAllTribus(db), tribusWithResults(db, sf.id)]);
+let values: Record<string, unknown> = { ...sf, tribuIds: sf.tribuIds.map(String) };
+let errors: Record<string, string> = {};
+let eventValues: Record<string, unknown> = { type: 'bracket', status: 'scheduled' };
+let eventErrors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  if (one(form, 'intent') === 'event') {
+    eventValues = form;
+    const parsed = parseForm(eventForm, form);
+    if (parsed.ok) {
+      const { categories, ...input } = parsed.data;
+      if (await eventSlugTaken(db, sf.id, input.slug, null))
+        eventErrors.slug = 'Another event this year uses this URL name.';
+      else {
+        const names = (categories ?? '')
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean)
+          .slice(0, 12);
+        const id = await createEvent(db, sf.id, input, names.length ? names : ['Open']);
+        await record(editor, {
+          action: 'create',
+          entityType: 'event',
+          entityId: id,
+          summary: `Added ${input.name} to ${sf.name}`,
+        });
+        return Astro.redirect(`${here}/${id}?done=created`, 303);
+      }
+    } else eventErrors = parsed.errors;
+  } else {
+    values = form;
+    const parsed = parseForm(sportsfestForm, form);
+    if (parsed.ok) {
+      const { tribuIds, ...input } = parsed.data;
+      const ids = [
+        ...new Set([
+          ...tribuIds.map(Number).filter((n) => tribus.some((t) => t.id === n)),
+          ...locked,
+        ]),
+      ];
+      if (await yearTaken(db, input.year, sf.id))
+        errors.year = 'There is already a Sportsfest that year.';
+      else if (input.startsOn && input.endsOn && input.endsOn < input.startsOn)
+        errors.endsOn = 'End it on or after the first day.';
+      else {
+        await updateSportsfest(db, sf.id, input, ids);
+        await record(editor, {
+          action: 'update',
+          entityType: 'sportsfest',
+          entityId: sf.id,
+          summary: `Edited ${input.name}`,
+        });
+        return doneRedirect(Astro, `/admin/sportsfest/${input.year}`, 'saved');
+      }
+    } else errors = parsed.errors;
+  }
+  Astro.response.status = 422;
+}
+
+const eventsList = await listEventsAdmin(db, sf.id);
+const v = (k: string) => (values[k] ?? '') as string;
+const ev = (k: string) => (eventValues[k] ?? '') as string;
+const chosen = new Set(
+  ([] as string[]).concat((values.tribuIds as string[] | string | undefined) ?? []).map(Number),
+);
+const TYPES = [
+  { value: 'bracket', label: 'Matches (a bracket or round robin)' },
+  { value: 'race', label: 'Timed or measured (athletics, swimming)' },
+  { value: 'judged', label: 'Judged (dance, pageant)' },
+  { value: 'mind', label: 'Ranked (quiz, games of the mind)' },
+];
+const STATUSES = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'ongoing', label: 'Ongoing' },
+  { value: 'done', label: 'Done' },
+  { value: 'postponed', label: 'Postponed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const STATE_LABEL: Record<string, string> = {
+  scheduled: 'Scheduled',
+  ongoing: 'Ongoing',
+  done: 'Done',
+  postponed: 'Postponed',
+  cancelled: 'Cancelled',
+};
+---
+
+<Admin title={sf.name} section="sportsfest" back={{ label: 'Sportsfests', href: '/admin/sportsfest' }}>
+  <a slot="actions" class="btn btn-secondary" href={`/sportsfest/${sf.year}`} target="_blank" rel="noopener">View on site</a>
+  <div class="columns main-side">
+    <div>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Events</h2>
+          <span class="muted small">{eventsList.length} {eventsList.length === 1 ? 'event' : 'events'}</span>
+        </div>
+        {
+          eventsList.length === 0 ? (
+            <p class="muted">No events yet. Add the first one below.</p>
+          ) : (
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">Event</th><th scope="col" class="hide-sm">Starts</th><th scope="col">Results</th><th scope="col">Status</th></tr></thead>
+                <tbody>
+                  {eventsList.map((e) => (
+                    <tr>
+                      <th scope="row">
+                        <a href={`${here}/${e.id}`}>{e.name}</a>
+                        <span class="muted small"> {e.categories.join(', ')}</span>
+                      </th>
+                      <td class="muted small hide-sm">{e.startsAt ? formatStamp(e.startsAt) : 'Not set'}</td>
+                      <td class="muted small">{e.finished} of {e.categories.length}</td>
+                      <td><span class:list={['badge', { sun: e.status === 'ongoing', ink: e.status === 'done' }]}>{STATE_LABEL[e.status]}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      </section>
+
+      <form class="panel form" method="post" id="add-event">
+        <h2>Add an event</h2>
+        <input type="hidden" name="intent" value="event" />
+        <div class="row two">
+          <Field name="name" id="event-name" label="Event" value={ev('name')} error={eventErrors.name} placeholder="Basketball" maxlength={80} />
+          <Field name="slug" id="event-slug" label="URL name" value={ev('slug')} error={eventErrors.slug} slugFrom="event-name" />
+        </div>
+        <Field name="categories" label="Categories" value={ev('categories')} error={eventErrors.categories} hint="Separate them with commas, like Men’s, Women’s. Medals are given per category. Leave empty for one open category." />
+        <div class="row two">
+          <Field name="type" label="How it’s decided" type="select" options={TYPES} value={ev('type')} error={eventErrors.type} />
+          <Field name="status" label="Status" type="select" options={STATUSES} value={ev('status')} error={eventErrors.status} />
+        </div>
+        <div class="row two">
+          <Field name="startsAt" label="Starts" type="datetime-local" value={ev('startsAt')} error={eventErrors.startsAt} hint="Philippine time." />
+          <Field name="venue" label="Venue" value={ev('venue')} error={eventErrors.venue} placeholder="Gymnasium" />
+        </div>
+        <Field name="note" label="Note" value={ev('note')} error={eventErrors.note} hint="Shown before results are in, like “All four tribus perform. Results after judging.”" />
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Add event</button></div>
+      </form>
+    </div>
+
+    <form class="panel form" method="post">
+      <h2>Details</h2>
+      <input type="hidden" name="intent" value="details" />
+      <div class="row two">
+        <Field name="year" label="Year" type="number" min={2000} max={2100} value={v('year')} error={errors.year} />
+        <Field
+          name="status"
+          label="Status"
+          type="select"
+          options={[{ value: 'upcoming', label: 'Coming up' }, { value: 'ongoing', label: 'Ongoing' }, { value: 'final', label: 'Final' }]}
+          value={v('status')}
+          error={errors.status}
+        />
+      </div>
+      <p class="hint">Coming up shows the tribus and schedule. Ongoing shows the live medal tally. Final shows the champion.</p>
+      <Field name="name" label="Name" value={v('name')} error={errors.name} maxlength={80} />
+      <Field name="theme" label="Theme" value={v('theme')} error={errors.theme} maxlength={200} />
+      <div class="row two">
+        <Field name="startsOn" label="First day" type="date" value={v('startsOn')} error={errors.startsOn} />
+        <Field name="endsOn" label="Last day" type="date" value={v('endsOn')} error={errors.endsOn} />
+      </div>
+      <fieldset>
+        <legend>Tribus taking part</legend>
+        {tribus.filter((t) => !t.archivedAt || chosen.has(t.id)).map((t) => (
+          <label class="check">
+            <input type="checkbox" name="tribuIds" value={t.id} checked={chosen.has(t.id)} disabled={locked.includes(t.id)} />
+            <TribuMark tribu={t} size="xs" />
+            {t.name}
+            {locked.includes(t.id) && <span class="muted small">has results</span>}
+          </label>
+        ))}
+        <p class="hint">Tribus with results stay in. <a href="/admin/sportsfest/tribus">Add or edit tribus</a>.</p>
+      </fieldset>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save details</button></div>
+    </form>
+  </div>
+</Admin>
+
+<style>
+  .hint a {
+    text-decoration: underline;
+  }
+</style>
