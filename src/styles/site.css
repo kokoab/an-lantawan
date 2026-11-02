@@ -1,0 +1,276 @@
+/* Public site styles. Values come from the Figma file (G · Site). */
+@import "@fontsource-variable/geist";
+
+:root {
+  --white: #ffffff;
+  --ink: #0a0a0a;
+  --grey-50: #fafafa;
+  --grey-100: #f3f3f1;
+  --grey-300: #d6d6d3;
+  --grey-600: #6b6b68;
+  --sunrise: linear-gradient(180deg, #ffe400 0%, #ffc700 100%);
+  --copper: #d08c4e;
+  --red: #d92d20;
+
+  --font: "Geist Variable", "Helvetica Neue", Arial, sans-serif;
+
+  /* Layout: 1216px of content, 112px margins at 1440, 24px on phones. */
+  --content: 1216px;
+  --gutter: max(24px, calc((100% - var(--content)) / 2));
+  /* Background grid module, and the frame rails: 3px from the edge on phones,
+     16px outside the content on wider screens. */
+  --module: 24px;
+  --rail-inset: 3px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --module: 32px;
+    --rail-inset: calc(var(--gutter) - 16px);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--white);
+  /* The 13% grey graph-paper grid behind every page. */
+  background-image:
+    linear-gradient(to right, rgb(214 214 211 / 0.13) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(214 214 211 / 0.13) 1px, transparent 1px);
+  background-size: var(--module) var(--module);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: -100px;
+  z-index: 100;
+  padding: 12px 16px;
+  background: var(--ink);
+  color: var(--white);
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 16px;
+}
+
+/* A full-width band of the page. `framed` draws the rails and rules from the design. */
+.band {
+  position: relative;
+  padding-inline: var(--gutter);
+}
+.band.framed::before,
+.band.framed::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+/* Rules one module in from the top and bottom, across the full width. */
+.band.framed::before {
+  inset: var(--module) 0;
+  border-block: 1px solid var(--grey-300);
+}
+/* Rails 16px outside the content on both sides, the full height of the band. */
+.band.framed::after {
+  inset: 0 var(--rail-inset);
+  border-inline: 1px solid var(--grey-300);
+}
+.band > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Buttons: square, 1px stroke. Yellow is always a fill with black text. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border: 1px solid transparent;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+.btn-primary {
+  background: var(--ink);
+  color: var(--white);
+}
+.btn-primary:hover {
+  background: #2a2a2a;
+}
+.btn-secondary {
+  background: var(--white);
+  border-color: var(--grey-300);
+  color: var(--ink);
+}
+.btn-secondary:hover {
+  border-color: var(--ink);
+}
+.btn-sunrise {
+  background: var(--sunrise);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.btn-sunrise:hover {
+  background: #ffd400;
+}
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* The yellow label that names a section on a lead story. */
+.pill {
+  display: inline-block;
+  padding: 7px 14px;
+  border: 1px solid var(--ink);
+  background: var(--sunrise);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+}
+
+/* Photos keep a 1px grey stroke and are cropped around their focal point. */
+.photo {
+  border: 1px solid var(--grey-300);
+  background: var(--grey-100);
+  overflow: hidden;
+}
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--fx, 50%) var(--fy, 50%);
+}
+/* Focal point crops, set by focalClasses() in src/lib/urls.ts. */
+.fx-0 {
+  --fx: 0%;
+}
+.fx-10 {
+  --fx: 10%;
+}
+.fx-20 {
+  --fx: 20%;
+}
+.fx-30 {
+  --fx: 30%;
+}
+.fx-40 {
+  --fx: 40%;
+}
+.fx-50 {
+  --fx: 50%;
+}
+.fx-60 {
+  --fx: 60%;
+}
+.fx-70 {
+  --fx: 70%;
+}
+.fx-80 {
+  --fx: 80%;
+}
+.fx-90 {
+  --fx: 90%;
+}
+.fx-100 {
+  --fx: 100%;
+}
+.fy-0 {
+  --fy: 0%;
+}
+.fy-10 {
+  --fy: 10%;
+}
+.fy-20 {
+  --fy: 20%;
+}
+.fy-30 {
+  --fy: 30%;
+}
+.fy-40 {
+  --fy: 40%;
+}
+.fy-50 {
+  --fy: 50%;
+}
+.fy-60 {
+  --fy: 60%;
+}
+.fy-70 {
+  --fy: 70%;
+}
+.fy-80 {
+  --fy: 80%;
+}
+.fy-90 {
+  --fy: 90%;
+}
+.fy-100 {
+  --fy: 100%;
+}
+
+/* Reduced motion must win over every component's own transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: must override components */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must override components */
+    animation-duration: 0.01ms !important;
+  }
+}
