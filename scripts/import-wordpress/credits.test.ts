@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Doc } from '../../src/core/content/doc.ts';
+import type { Block, Doc } from '../../src/core/content/doc.ts';
 import { extractCredits, looksLikeName, parseCreditLine, tidyName } from './credits.ts';
 
 describe('parseCreditLine', () => {
@@ -169,7 +169,7 @@ describe('extractCredits', () => {
       type: 'image' as const,
       attrs: { mediaId: null, key: null, alt: '', caption: '' },
     };
-    const middle = Array.from({ length: 10 }, (_, i) => p(`Paragraph ${i}`));
+    const middle: Block[] = Array.from({ length: 10 }, (_, i) => p(`Paragraph ${i}`));
     middle.splice(5, 0, img, p('Photo by Cyrus Delloro | An Lantawan Multimedia'));
     const r = extractCredits({ type: 'doc', content: middle });
     expect(r.doc.content).toHaveLength(11);
