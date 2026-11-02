@@ -61,3 +61,22 @@ describe('roundRobinRounds', () => {
     expect(new Set(games.map(([a, b]) => pairKey(a, b))).size).toBe(10);
   });
 });
+
+describe('standings with other rules and half points', () => {
+  it('uses the stage rule and keeps half-point scores', () => {
+    const rows = standings(
+      [1, 2, 3],
+      [
+        { homeTribuId: 1, awayTribuId: 2, homeScore: 2.5, awayScore: 1.5 },
+        { homeTribuId: 2, awayTribuId: 3, homeScore: 2, awayScore: 2 },
+        { homeTribuId: 3, awayTribuId: 1, homeScore: 0.5, awayScore: 3.5 },
+      ],
+      { win: 2, draw: 1, loss: 0 },
+    );
+    expect(rows.map((r) => [r.tribuId, r.points, r.scored])).toEqual([
+      [1, 4, 6],
+      [2, 1, 3.5],
+      [3, 1, 2.5],
+    ]);
+  });
+});

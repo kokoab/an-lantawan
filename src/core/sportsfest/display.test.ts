@@ -4,8 +4,10 @@ import {
   festivalDay,
   filterRows,
   formatName,
+  formatScore,
   manilaDay,
   ordinal,
+  pointsRuleText,
   roundName,
   rowState,
   scheduleDays,
@@ -205,5 +207,30 @@ describe('formatName', () => {
     expect(formatName('bracket', ['group', 'single'])).toBe('Groups, then knockout');
     expect(formatName('race', [])).toBe('Timed final');
     expect(formatName('judged', [])).toBe('Judged');
+  });
+});
+
+describe('formatScore', () => {
+  it('writes halves the way chess scores are written', () => {
+    expect([2.5, 0.5, 3, 0, 12, -0.5, 1.25, null].map(formatScore)).toEqual([
+      '2½',
+      '½',
+      '3',
+      '0',
+      '12',
+      '-½',
+      '1.3',
+      '',
+    ]);
+  });
+});
+
+describe('pointsRuleText', () => {
+  it('describes the rule, mentioning a loss only when it scores', () => {
+    expect(pointsRuleText({ win: 2, draw: 1, loss: 0 })).toBe('2 points for a win, 1 for a draw');
+    expect(pointsRuleText({ win: 1, draw: 0.5, loss: 0 })).toBe('1 point for a win, ½ for a draw');
+    expect(pointsRuleText({ win: 3, draw: 1, loss: 1 })).toBe(
+      '3 points for a win, 1 for a draw, 1 for a loss',
+    );
   });
 });

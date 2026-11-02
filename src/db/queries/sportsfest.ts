@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, ne, or } from 'drizzle-orm';
 import { type Medal, medalTally } from '../../core/sportsfest/tally';
 import type { Db } from '../client';
 import {
@@ -59,7 +59,7 @@ export async function listSportsfests(db: Db) {
   return db.select().from(sportsfests).orderBy(desc(sportsfests.year));
 }
 
-/** Every medal of a Sportsfest, with the category and event it came from. */
+/** Every medal (places 1 to 3) of a Sportsfest, with the category it came from. */
 async function listPlacements(db: Db, sportsfestId: number) {
   return db
     .select({
@@ -71,7 +71,13 @@ async function listPlacements(db: Db, sportsfestId: number) {
     .from(placements)
     .innerJoin(categories, eq(categories.id, placements.categoryId))
     .innerJoin(events, eq(events.id, categories.eventId))
-    .where(and(eq(events.sportsfestId, sportsfestId), ne(events.status, 'cancelled')));
+    .where(
+      and(
+        eq(events.sportsfestId, sportsfestId),
+        ne(events.status, 'cancelled'),
+        lte(placements.place, 3),
+      ),
+    );
 }
 
 /** The medal tally of a Sportsfest, computed from results and never stored. */

@@ -171,3 +171,21 @@ export function formatName(type: EventType, stageKinds: readonly StageKind[]) {
   if (stageKinds.length) return 'Single elimination';
   return { bracket: 'Knockout', race: 'Timed final', judged: 'Judged', mind: 'Ranked' }[type];
 }
+
+/** Scores as people write them: 2½, ½, 12. Other fractions keep one decimal. */
+export function formatScore(n: number | null) {
+  if (n === null) return '';
+  const whole = Math.trunc(n);
+  const rest = Math.abs(n - whole);
+  if (rest === 0) return String(whole);
+  if (Math.abs(rest - 0.5) < 1e-9) return `${whole === 0 ? (n < 0 ? '-' : '') : whole}½`;
+  return n.toFixed(1);
+}
+
+/** "2 points for a win, 1 for a draw", leaving out a loss when it scores nothing. */
+export function pointsRuleText(rule: { win: number; draw: number; loss: number }) {
+  const p = (n: number) => `${formatScore(n)} ${n === 1 ? 'point' : 'points'}`;
+  const parts = [`${p(rule.win)} for a win`, `${formatScore(rule.draw)} for a draw`];
+  if (rule.loss !== 0) parts.push(`${formatScore(rule.loss)} for a loss`);
+  return parts.join(', ');
+}
