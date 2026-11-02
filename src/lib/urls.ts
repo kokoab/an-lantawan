@@ -27,3 +27,10 @@ export function storyLabel(s: { kind: string; section: { name: string } }): stri
   if (s.kind === 'cartoon') return 'Editorial cartoon';
   return s.section.name;
 }
+
+export const sportsfestUrl = (year: number) => `/sportsfest/${year}`;
+
+export const eventUrl = (year: number, slug: string, categoryId?: number) =>
+  `/sportsfest/${year}/${slug}${categoryId ? `?category=${categoryId}` : ''}`;
+
+export const tribuUrl = (year: number, slug: string) => `/sportsfest/${year}/tribus/${slug}`;
