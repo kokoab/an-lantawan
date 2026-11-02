@@ -1,6 +1,6 @@
-import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, notInArray, type SQL } from 'drizzle-orm';
 import type { Db } from '../client';
-import { media, sections, stories } from '../schema';
+import { media, people, sections, stories, storyAuthors } from '../schema';
 
 /** What a story card or list item needs. */
 export interface StorySummary {
@@ -11,7 +11,14 @@ export interface StorySummary {
   dek: string | null;
   publishedAt: Date | null;
   section: { name: string; slug: string };
-  cover: { key: string; alt: string | null; focalX: number; focalY: number } | null;
+  cover: {
+    key: string;
+    alt: string | null;
+    focalX: number;
+    focalY: number;
+    width: number | null;
+    height: number | null;
+  } | null;
 }
 
 const summaryColumns = {
@@ -27,6 +34,8 @@ const summaryColumns = {
   coverAlt: media.alt,
   focalX: media.focalX,
   focalY: media.focalY,
+  coverWidth: media.width,
+  coverHeight: media.height,
 };
 
 type SummaryRow = {
@@ -43,7 +52,14 @@ function toSummary(r: SummaryRow): StorySummary {
     publishedAt: r.publishedAt,
     section: { name: r.sectionName as string, slug: r.sectionSlug as string },
     cover: r.coverKey
-      ? { key: r.coverKey, alt: r.coverAlt, focalX: r.focalX ?? 0.5, focalY: r.focalY ?? 0.5 }
+      ? {
+          key: r.coverKey,
+          alt: r.coverAlt,
+          focalX: r.focalX ?? 0.5,
+          focalY: r.focalY ?? 0.5,
+          width: r.coverWidth,
+          height: r.coverHeight,
+        }
       : null,
   };
 }
@@ -123,4 +139,50 @@ export async function listLatest(db: Db, limit: number) {
     .orderBy(desc(stories.publishedAt), desc(stories.id))
     .limit(limit);
   return rows.map(toSummary);
+}
+
+/** Newest published stories matching `where`, skipping the IDs already shown on the page. */
+export async function listNewest(
+  db: Db,
+  { where, exclude = [], limit }: { where?: SQL; exclude?: number[]; limit: number },
+) {
+  const rows = await db
+    .select(summaryColumns)
+    .from(stories)
+    .innerJoin(sections, eq(sections.id, stories.sectionId))
+    .leftJoin(media, eq(media.id, stories.coverId))
+    .where(and(published, where, exclude.length ? notInArray(stories.id, exclude) : undefined))
+    .orderBy(desc(stories.publishedAt), desc(stories.id))
+    .limit(limit);
+  return rows.map(toSummary);
+}
+
+/** A published story by ID, as a summary. */
+export async function getSummary(db: Db, id: number) {
+  const [row] = await listNewest(db, { where: eq(stories.id, id), limit: 1 });
+  return row ?? null;
+}
+
+/** Writer names for each story, in byline order. */
+export async function listWriters(db: Db, storyIds: number[]) {
+  const out = new Map<number, string[]>();
+  if (!storyIds.length) return out;
+  const rows = await db
+    .select({ storyId: storyAuthors.storyId, name: people.name })
+    .from(storyAuthors)
+    .innerJoin(people, eq(people.id, storyAuthors.personId))
+    .where(and(inArray(storyAuthors.storyId, storyIds), eq(storyAuthors.role, 'writer')))
+    .orderBy(storyAuthors.sort);
+  for (const r of rows) out.set(r.storyId, [...(out.get(r.storyId) ?? []), r.name]);
+  return out;
+}
+
+/** A story's body, for reading time and the article page. */
+export async function getBody(db: Db, id: number) {
+  const [row] = await db
+    .select({ body: stories.body })
+    .from(stories)
+    .where(eq(stories.id, id))
+    .limit(1);
+  return row?.body ?? null;
 }
