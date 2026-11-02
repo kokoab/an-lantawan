@@ -1,0 +1,231 @@
+---
+import Pagination from '../../components/stories/Pagination.astro';
+import StoryCard from '../../components/stories/StoryCard.astro';
+import { parsePage, STORIES_PER_PAGE } from '../../core/paging';
+import { db } from '../../db/client';
+import { getPerson } from '../../db/queries/people';
+import { listStoriesBy } from '../../db/queries/stories';
+import Site from '../../layouts/Site.astro';
+import { mediaUrl } from '../../lib/urls';
+
+const person = await getPerson(db, Astro.params.slug ?? '');
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (!person || !page) return Astro.rewrite('/404');
+
+const work = await listStoriesBy(db, person.id, { page, perPage: STORIES_PER_PAGE });
+if (page > work.pages) return Astro.rewrite('/404');
+
+const { name, bio, photoKey, terms } = person;
+const firstName = name.split(' ')[0];
+const currentRoles = terms.length
+  ? [...new Set(terms.filter((t) => t.schoolYear === terms[0].schoolYear).map((t) => t.position))]
+  : [];
+const since = terms.length
+  ? terms.at(-1)?.schoolYear.slice(0, 4)
+  : work.firstAt
+    ? String(work.firstAt.getUTCFullYear())
+    : null;
+const href = (p: number) =>
+  p === 1 ? `/people/${person.slug}` : `/people/${person.slug}?page=${p}`;
+---
+
+<Site title={name} description={bio ?? `Stories by ${name} for An Lantawan.`}>
+  <section class="band framed head">
+    {
+      photoKey && (
+        <div class="photo">
+          <img src={mediaUrl(photoKey)} alt="" />
+        </div>
+      )
+    }
+    <div class="text">
+      <h1>{name}</h1>
+      {currentRoles.length > 0 && <p class="roles">{currentRoles.join(', ')}</p>}
+      {bio && <p class="bio">{bio}</p>}
+      <dl class="facts">
+        <div>
+          <dt>Stories</dt>
+          <dd>{work.total}</dd>
+        </div>
+        {
+          since && (
+            <div>
+              <dt>{terms.length ? 'On staff since' : 'First story'}</dt>
+              <dd>{since}</dd>
+            </div>
+          )
+        }
+        {
+          work.sections.length > 0 && (
+            <div>
+              <dt>Writes for</dt>
+              <dd>{work.sections.join(', ')}</dd>
+            </div>
+          )
+        }
+      </dl>
+    </div>
+  </section>
+
+  <section class="band framed stories" aria-labelledby="by-title">
+    <div class="stories-head">
+      <h2 id="by-title">Stories by {firstName}</h2>
+      {work.total > 0 && <p>Showing {work.stories.length} of {work.total}</p>}
+    </div>
+    {
+      work.total === 0 ? (
+        <p class="empty">No published stories credit {firstName} yet.</p>
+      ) : (
+        <>
+          <div class="grid">
+            {work.stories.map((s) => (
+              <StoryCard story={s} />
+            ))}
+          </div>
+          <Pagination page={page} pages={work.pages} href={href} />
+        </>
+      )
+    }
+  </section>
+</Site>
+
+<style>
+  h1,
+  h2,
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding-block: 40px 56px;
+  }
+  .photo {
+    max-width: 320px;
+    aspect-ratio: 432 / 512;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    overflow: hidden;
+  }
+  .photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .text {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  h1 {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+  .roles {
+    font-size: 18px;
+    line-height: 26px;
+    color: var(--grey-600);
+  }
+  .bio {
+    max-width: 640px;
+    font-size: 17px;
+    line-height: 27px;
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .facts dt {
+    font-size: 13px;
+    color: var(--grey-600);
+  }
+  .facts dd {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .stories {
+    padding-block: 40px 72px;
+  }
+  .stories-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 24px;
+  }
+  .stories-head h2 {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .stories-head p {
+    font-size: 14px;
+    color: var(--grey-600);
+  }
+  .empty {
+    padding-block: 24px;
+    border-top: 1px solid var(--grey-300);
+    color: var(--grey-600);
+  }
+  .grid {
+    display: grid;
+    column-gap: 24px;
+    overflow: hidden;
+  }
+  .grid > :global(*) {
+    position: relative;
+    padding-block: 20px;
+  }
+  .grid > :global(*)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -24px;
+    right: -24px;
+    border-top: 1px solid var(--grey-300);
+  }
+  @media (min-width: 768px) {
+    .grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .grid > :global(*) {
+      padding-block: 32px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .head {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 48px;
+      padding-block: 64px 96px;
+    }
+    .photo {
+      flex: 0 0 calc((100% - 48px) * 432 / 1168);
+      max-width: none;
+    }
+    .text {
+      flex: 1;
+      padding-top: 8px;
+    }
+    h1 {
+      font-size: 72px;
+      line-height: 74px;
+    }
+    .stories {
+      padding-block: 64px 128px;
+    }
+    .stories-head h2 {
+      font-size: 28px;
+    }
+    .grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+</style>
