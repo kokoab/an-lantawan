@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countWords,
   festivalDay,
   filterRows,
+  formatName,
   manilaDay,
   ordinal,
   roundName,
@@ -183,5 +185,25 @@ describe('ordinal', () => {
       '101st',
       '111th',
     ]);
+  });
+});
+
+describe('countWords', () => {
+  it('spells small counts and pluralises', () => {
+    expect(countWords(4, 'tribu')).toBe('Four tribus');
+    expect(countWords(1, 'day')).toBe('One day');
+    expect(countWords(0, 'event')).toBe('No events');
+    expect(countWords(40, 'medal event')).toBe('40 medal events');
+  });
+});
+
+describe('formatName', () => {
+  it('reads the format from the stages first, then the event type', () => {
+    expect(formatName('bracket', ['single', 'final'])).toBe('Single elimination');
+    expect(formatName('bracket', ['upper', 'lower', 'final'])).toBe('Double elimination');
+    expect(formatName('mind', ['group'])).toBe('Round robin');
+    expect(formatName('bracket', ['group', 'single'])).toBe('Groups, then knockout');
+    expect(formatName('race', [])).toBe('Timed final');
+    expect(formatName('judged', [])).toBe('Judged');
   });
 });

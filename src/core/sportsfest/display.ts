@@ -151,3 +151,23 @@ export function ordinal(n: number) {
   const v = n % 100;
   return `${n}${ORDINALS[(v - 20) % 10] ?? ORDINALS[v] ?? ORDINALS[0]}`;
 }
+
+const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
+/** "Four tribus", "12 tribus": small counts read better as words at the start of a sentence. */
+export const countWords = (n: number, noun: string) =>
+  `${WORDS[n] ?? n} ${noun}${n === 1 ? '' : 's'}`;
+
+export type StageKind = 'single' | 'upper' | 'lower' | 'final' | 'group';
+export type EventType = 'bracket' | 'race' | 'judged' | 'mind';
+
+/** The format line on an event page, from how its competition is set up. */
+export function formatName(type: EventType, stageKinds: readonly StageKind[]) {
+  if (stageKinds.includes('lower')) return 'Double elimination';
+  if (stageKinds.includes('group') && stageKinds.some((k) => k !== 'group')) {
+    return 'Groups, then knockout';
+  }
+  if (stageKinds.includes('group')) return 'Round robin';
+  if (stageKinds.length) return 'Single elimination';
+  return { bracket: 'Knockout', race: 'Timed final', judged: 'Judged', mind: 'Ranked' }[type];
+}
