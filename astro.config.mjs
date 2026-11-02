@@ -17,7 +17,7 @@ export default defineConfig({
       directives: [
         "default-src 'self'",
         "img-src 'self' data:",
-        'font-src https://fonts.gstatic.com',
+        "font-src 'self' https://fonts.gstatic.com",
         "connect-src 'self'",
         'frame-src https://challenges.cloudflare.com',
         "object-src 'none'",
