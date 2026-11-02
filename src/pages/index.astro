@@ -1,6 +1,24 @@
 ---
+// Stand-in until the designed homepage is built: the newest stories from every section.
+import StoryList from '../components/stories/StoryList.astro';
+import { db } from '../db/client';
+import Site from '../layouts/Site.astro';
+import { loadStoryList } from '../lib/story-list';
+
+const list = await loadStoryList(db, { current: null, sectionIds: [], page: 1 });
+const pageHref = (p: number) => (p === 1 ? '/stories' : `/stories?page=${p}`);
 ---
-<html lang="en">
-  <head><meta charset="utf-8" /><title>An Lantawan</title></head>
-  <body><h1>An Lantawan</h1></body>
-</html>
+
+<Site title="An Lantawan">
+  <StoryList
+    title="Latest"
+    intro="The newest stories from the official student publication of Leyte Normal University."
+    filters={list.filters}
+    lead={list.lead}
+    grid={list.grid}
+    total={list.total}
+    page={1}
+    pages={list.pages}
+    pageHref={pageHref}
+  />
+</Site>
