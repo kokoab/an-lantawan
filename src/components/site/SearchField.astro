@@ -8,17 +8,30 @@ interface Props {
   value?: string;
   /** `large` is the 404 and Search page size on wide screens. */
   size?: 'medium' | 'large';
+  /** Set when the field sits inside a larger form, such as the All events filters. */
+  inForm?: boolean;
 }
 
-const { id, placeholder = 'Search stories', value, size = 'medium' } = Astro.props;
+const { id, placeholder = 'Search stories', value, size = 'medium', inForm = false } = Astro.props;
 ---
 
-<form class:list={['search-field', size]} action="/search" method="get" role="search">
-  <SearchIcon />
-  <label class="visually-hidden" for={id}>Search</label>
-  <input id={id} name="q" type="search" placeholder={placeholder} value={value} />
-  <button class="btn btn-primary" type="submit">Search</button>
-</form>
+{
+  inForm ? (
+    <div class:list={['search-field', size]}>
+      <SearchIcon />
+      <label class="visually-hidden" for={id}>Search</label>
+      <input id={id} name="q" type="search" placeholder={placeholder} value={value} />
+      <button class="btn btn-primary" type="submit">Search</button>
+    </div>
+  ) : (
+    <form class:list={['search-field', size]} action="/search" method="get" role="search">
+      <SearchIcon />
+      <label class="visually-hidden" for={id}>Search</label>
+      <input id={id} name="q" type="search" placeholder={placeholder} value={value} />
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+  )
+}
 
 <style>
   .search-field {
