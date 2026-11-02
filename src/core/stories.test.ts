@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLive, nextState } from './stories';
+import { isLive, nextState, readCredits, readTags } from './stories';
 
 const now = new Date('2026-11-03T04:00:00Z');
 const past = new Date('2026-10-01T00:00:00Z');
@@ -37,6 +37,22 @@ describe('nextState', () => {
     expect(state(nextState(unpublished, 'publish', null, now))).toEqual(live);
   });
 
+  it('moves a live story to scheduled when its date is set in the future, and back', () => {
+    expect(state(nextState(live, 'save', future, now))).toEqual({
+      status: 'scheduled',
+      publishedAt: future,
+    });
+    const scheduled = { status: 'scheduled' as const, publishedAt: future };
+    expect(state(nextState(scheduled, 'save', past, now))).toEqual({
+      status: 'published',
+      publishedAt: past,
+    });
+    expect(state(nextState(draft, 'save', future, now))).toEqual({
+      status: 'draft',
+      publishedAt: future,
+    });
+  });
+
   it('saving keeps the status, and a scheduled story can move to another future time', () => {
     expect(state(nextState(live, 'save', null, now))).toEqual(live);
     const scheduled = { status: 'scheduled' as const, publishedAt: future };
@@ -64,5 +80,49 @@ describe('isLive', () => {
     expect(isLive({ status: 'scheduled', publishedAt: future }, now)).toBe(false);
     expect(isLive(draft, now)).toBe(false);
     expect(isLive({ status: 'archived', publishedAt: past }, now)).toBe(false);
+  });
+});
+
+describe('readCredits', () => {
+  it('pairs people with roles, skipping empty rows and repeats', () => {
+    expect(
+      readCredits(['4', '', '7', '4'], ['writer', 'writer', 'photographer', 'writer']),
+    ).toEqual({
+      ok: true,
+      credits: [
+        { personId: 4, role: 'writer' },
+        { personId: 7, role: 'photographer' },
+      ],
+    });
+  });
+
+  it('lets one person hold two roles', () => {
+    const r = readCredits(['4', '4'], ['writer', 'photographer']);
+    expect(r.ok && r.credits.length).toBe(2);
+  });
+
+  it('refuses unknown people and roles', () => {
+    expect(readCredits(['x'], ['writer'])).toEqual({
+      ok: false,
+      error: 'Credit 1: choose someone from the list.',
+    });
+    expect(readCredits(['3'], ['boss'])).toEqual({
+      ok: false,
+      error: 'Credit 1: choose what they did.',
+    });
+  });
+});
+
+describe('readTags', () => {
+  it('splits, trims and removes repeats regardless of case', () => {
+    expect(readTags(' Sportsfest, basketball ,, sportsfest , SSC  elections')).toEqual({
+      ok: true,
+      tags: ['Sportsfest', 'basketball', 'SSC elections'],
+    });
+  });
+
+  it('limits length and count', () => {
+    expect(readTags('x'.repeat(41)).ok).toBe(false);
+    expect(readTags(Array.from({ length: 11 }, (_, i) => `t${i}`).join(',')).ok).toBe(false);
   });
 });
