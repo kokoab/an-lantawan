@@ -1,0 +1,94 @@
+---
+import Field from '../../components/admin/Field.astro';
+import { parseForm } from '../../core/forms';
+import { db } from '../../db/client';
+import { deleteRedirect, listRedirects, saveRedirect } from '../../db/queries/admin/access';
+import Admin from '../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readForm, record } from '../../lib/admin';
+import { redirectForm } from '../../lib/admin-schemas';
+import { formatStamp } from '../../lib/format';
+
+const editor = editorOf(Astro);
+let values: Record<string, unknown> = {};
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  if (one(form, 'intent') === 'delete') {
+    const from = one(form, 'from');
+    await deleteRedirect(db, from);
+    await record(editor, {
+      action: 'delete',
+      entityType: 'redirect',
+      summary: `Removed the redirect from ${from}`,
+    });
+    return doneRedirect(Astro, '/admin/redirects', 'deleted');
+  }
+  values = form;
+  const parsed = parseForm(redirectForm, form);
+  if (!parsed.ok) errors = parsed.errors;
+  else if (parsed.data.from === parsed.data.to) errors.to = 'Send it somewhere else.';
+  else if (parsed.data.from.startsWith('/admin') || parsed.data.from.startsWith('/api'))
+    errors.from = 'Admin and API addresses can’t be redirected.';
+  else {
+    await saveRedirect(db, parsed.data.from, parsed.data.to);
+    await record(editor, {
+      action: 'create',
+      entityType: 'redirect',
+      summary: `Sent ${parsed.data.from} to ${parsed.data.to}`,
+    });
+    return doneRedirect(Astro, '/admin/redirects', 'created');
+  }
+  Astro.response.status = 422;
+}
+
+const rows = await listRedirects(db);
+---
+
+<Admin title="Redirects" section="redirects">
+  <p class="panel-note">
+    Old addresses that now lead somewhere else. Renaming a story or section adds one here on its own.
+    They work for section and story addresses, like /news or /news/old-story.
+  </p>
+  <div class="columns main-side">
+    {
+      rows.length === 0 ? (
+        <div class="empty-state"><h2>No redirects</h2><p>When a story or section is renamed, its old address is kept here.</p></div>
+      ) : (
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Old address</th><th scope="col">Goes to</th><th scope="col" class="hide-sm">Added</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr>
+                  <td class="path">{r.fromPath}</td>
+                  <td class="path"><a href={r.toPath} target="_blank" rel="noopener">{r.toPath}</a></td>
+                  <td class="muted small hide-sm">{formatStamp(r.createdAt)}</td>
+                  <td class="actions">
+                    <form method="post"><input type="hidden" name="intent" value="delete" /><input type="hidden" name="from" value={r.fromPath} /><button class="link-button danger small" type="submit" data-confirm={`Remove the redirect from ${r.fromPath}? That old address will show “not found”.`}>Remove</button></form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    <form class="panel form" method="post">
+      <h2>Add a redirect</h2>
+      <Field name="from" label="Old address" value={values.from as string} error={errors.from} placeholder="/news/old-story" />
+      <Field name="to" label="New address" value={values.to as string} error={errors.to} placeholder="/news/new-story" />
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Add redirect</button></div>
+    </form>
+  </div>
+</Admin>
+
+<style>
+  .path {
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+  .path a {
+    text-decoration: underline;
+  }
+</style>
