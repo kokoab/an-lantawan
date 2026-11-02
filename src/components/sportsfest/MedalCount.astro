@@ -1,0 +1,69 @@
+---
+/** A medal count on its medal's colour: yellow for gold, grey for silver, copper for bronze. */
+interface Props {
+  medal: 1 | 2 | 3;
+  count: number;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+const { medal, count, size = 'lg' } = Astro.props;
+const NAMES = { 1: 'gold', 2: 'silver', 3: 'bronze' } as const;
+---
+
+<span class:list={['count', NAMES[medal], size]}>
+  {count}
+  <span class="visually-hidden">{NAMES[medal]}</span>
+</span>
+
+<style>
+  .count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ink);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .gold {
+    background: var(--sunrise);
+  }
+  .silver {
+    background: var(--grey-300);
+  }
+  .bronze {
+    background: var(--copper);
+  }
+  .lg {
+    width: 44px;
+    height: 36px;
+    font-size: 20px;
+  }
+  .md {
+    width: 44px;
+    height: 36px;
+    font-size: 18px;
+  }
+  .sm {
+    width: 40px;
+    height: 28px;
+    font-size: 16px;
+  }
+  @media (min-width: 1024px) {
+    .lg {
+      width: 104px;
+      height: 56px;
+      font-size: 32px;
+    }
+    .md {
+      width: 64px;
+      height: 44px;
+      font-size: 24px;
+    }
+    .sm {
+      width: 48px;
+      height: 32px;
+      font-size: 18px;
+    }
+  }
+</style>

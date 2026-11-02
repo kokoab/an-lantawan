@@ -1,0 +1,246 @@
+---
+/**
+ * Medal events with their status and winners. On the hub the status shows when an event
+ * starts; on All events that moves to its own When column.
+ */
+import { manilaDay, rowState } from '../../core/sportsfest/display';
+import type { EventRow, TribuInfo } from '../../db/queries/sportsfest';
+import { formatDayMonth, formatTime } from '../../lib/format';
+import { eventUrl } from '../../lib/urls';
+import StatePill from './StatePill.astro';
+import TribuChip from './TribuChip.astro';
+
+interface Props {
+  rows: EventRow[];
+  tribus: TribuInfo[];
+  year: number;
+  showWhen?: boolean;
+}
+
+const { rows, tribus, year, showWhen = false } = Astro.props;
+const byId = new Map(tribus.map((t) => [t.id, t]));
+const today = manilaDay(new Date());
+
+function when(d: Date | null, withTime: boolean) {
+  if (!d) return '';
+  if (!withTime) return formatDayMonth(d);
+  return manilaDay(d) === today
+    ? `Today, ${formatTime(d)}`
+    : `${formatDayMonth(d)}, ${formatTime(d)}`;
+}
+
+const view = rows.map((r) => {
+  const state = rowState(r.event.status, r.medals[1].length > 0);
+  const start = r.event.startsAt;
+  const startsToday = start !== null && manilaDay(start) === today;
+  const pill = start ? (startsToday ? formatTime(start) : formatDayMonth(start)) : null;
+  let note = '';
+  if (state === 'ongoing') note = 'Medals once the event ends';
+  else if (state === 'upcoming') {
+    const venue = r.event.venue ? `, ${r.event.venue}` : '';
+    note =
+      r.event.note ??
+      (showWhen || !start
+        ? 'No medals yet'
+        : `Starts ${startsToday ? 'at' : 'on'} ${pill}${startsToday ? venue : ''}`);
+  } else if (state !== 'final') note = r.event.note ?? '';
+  return {
+    ...r,
+    state,
+    pill: showWhen ? null : pill,
+    when: when(start, state !== 'final'),
+    note,
+    places: ([1, 2, 3] as const).map((p) => r.medals[p].flatMap((id) => byId.get(id) ?? [])),
+  };
+});
+---
+
+<table class:list={['events', { 'with-when': showWhen }]}>
+  <thead>
+    <tr>
+      <th scope="col">Event</th>
+      {showWhen && <th scope="col">When</th>}
+      <th scope="col">Status</th>
+      <th scope="col"><span class="key gold"></span>Gold</th>
+      <th scope="col"><span class="key silver"></span>Silver</th>
+      <th scope="col"><span class="key bronze"></span>Bronze</th>
+    </tr>
+  </thead>
+  <tbody>
+    {
+      view.map((r) => (
+        <tr>
+          <th scope="row" class="name">
+            <a href={eventUrl(year, r.event.slug, r.categoryId)}>
+              <strong>{r.event.name}</strong> <span>{r.category}</span>
+            </a>
+          </th>
+          {showWhen && <td class="when">{r.when}</td>}
+          <td class="status">
+            <StatePill state={r.state} label={r.pill} />
+          </td>
+          {r.state === 'final' && r.places[0].length > 0 ? (
+            r.places.map((tribusHere, i) => (
+              <td class="medal">
+                <span class="visually-hidden">{['Gold', 'Silver', 'Bronze'][i]}: </span>
+                {tribusHere.length ? (
+                  tribusHere.map((t) => <TribuChip tribu={t} year={year} />)
+                ) : (
+                  <span class="none">None</span>
+                )}
+              </td>
+            ))
+          ) : (
+            <td class="note" colspan="3">
+              {r.note}
+            </td>
+          )}
+        </tr>
+      ))
+    }
+  </tbody>
+</table>
+
+<style>
+  .events {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    line-height: 18px;
+  }
+  thead {
+    display: none;
+  }
+  tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+    padding-block: 14px;
+    border-top: 1px solid var(--grey-300);
+  }
+  tbody tr:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  th,
+  td {
+    padding: 0;
+    font-weight: inherit;
+    text-align: left;
+  }
+  .name a {
+    display: block;
+  }
+  .name strong {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .name span {
+    margin-left: 4px;
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+  .name a:hover strong {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .when {
+    grid-column: 1;
+    color: var(--grey-600);
+  }
+  .status {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+  }
+  .medal,
+  .note {
+    grid-column: 1 / -1;
+  }
+  .medal {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .note,
+  .none {
+    color: var(--grey-600);
+  }
+  /* Phones list the three medals in one row under the event. */
+  tbody tr:has(.medal) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  tbody tr:has(.medal) .name {
+    grid-column: 1 / 3;
+  }
+  tbody tr:has(.medal) .status {
+    grid-column: 3;
+  }
+  tbody tr:has(.medal) .when {
+    grid-column: 1 / -1;
+  }
+  tbody tr:has(.medal) .medal {
+    grid-column: auto;
+  }
+  .key {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border: 1px solid var(--ink);
+    vertical-align: -1px;
+  }
+  .key.gold {
+    background: var(--sunrise);
+  }
+  .key.silver {
+    background: var(--grey-300);
+  }
+  .key.bronze {
+    background: var(--copper);
+  }
+
+  @media (min-width: 1024px) {
+    thead {
+      display: table-header-group;
+    }
+    thead th {
+      padding-bottom: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 14px;
+      color: var(--grey-600);
+    }
+    tbody tr,
+    tbody tr:has(.medal) {
+      display: table-row;
+    }
+    th,
+    td {
+      padding-block: 16px;
+      vertical-align: middle;
+    }
+    .name {
+      width: 37%;
+    }
+    .with-when .name {
+      width: 31%;
+    }
+    .when {
+      width: 13%;
+    }
+    .status {
+      width: 11%;
+    }
+    .medal {
+      display: table-cell;
+      width: 17%;
+    }
+    .medal :global(.chip) {
+      display: flex;
+    }
+    .medal :global(.chip + .chip) {
+      margin-top: 6px;
+    }
+  }
+</style>

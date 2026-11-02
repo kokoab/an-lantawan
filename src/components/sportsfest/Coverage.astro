@@ -1,0 +1,65 @@
+---
+/** Stories linked to a Sportsfest or one of its events. Renders nothing without any. */
+import type { StorySummary } from '../../db/queries/stories';
+import StoryCard from '../stories/StoryCard.astro';
+
+interface Props {
+  title: string;
+  stories: StorySummary[];
+}
+
+const { title, stories } = Astro.props;
+---
+
+{
+  stories.length > 0 && (
+    <section class="band framed coverage" aria-labelledby="coverage-title">
+      <h2 id="coverage-title">{title}</h2>
+      <div class="grid">
+        {stories.map((s) => (
+          <StoryCard story={s} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+<style>
+  .coverage {
+    padding-block: 48px 56px;
+  }
+  h2 {
+    margin: 0 0 16px;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.04em;
+  }
+  .grid {
+    display: grid;
+    gap: 0 24px;
+  }
+  .grid > :global(*) {
+    padding-block: 16px;
+    border-top: 1px solid var(--grey-300);
+  }
+  @media (min-width: 768px) {
+    .grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .grid > :global(*) {
+      padding-block: 0;
+      border-top: 0;
+    }
+  }
+  @media (min-width: 1024px) {
+    .coverage {
+      padding-block: 96px 64px;
+    }
+    h2 {
+      margin-bottom: 24px;
+      font-size: 40px;
+      line-height: 44px;
+    }
+  }
+</style>

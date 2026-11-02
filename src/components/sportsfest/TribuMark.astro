@@ -1,0 +1,92 @@
+---
+/**
+ * A tribu's square: its uploaded logo, or its colour with the initial on it. Drawn as SVG
+ * because the colour comes from the database and the CSP blocks style attributes.
+ */
+import { tribuInitial, tribuTile } from '../../core/sportsfest/display';
+import type { TribuInfo } from '../../db/queries/sportsfest';
+import { mediaUrl } from '../../lib/urls';
+
+interface Props {
+  tribu: Pick<TribuInfo, 'name' | 'color' | 'logoKey'>;
+  /** xs 20px, sm 24px, md 48px, lg 56px, xl 120px on desktop. */
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+}
+
+const { tribu, size = 'md' } = Astro.props;
+const tile = tribuTile(tribu.color);
+---
+
+{
+  tribu.logoKey ? (
+    <img class:list={['mark', size]} src={mediaUrl(tribu.logoKey)} alt="" width="48" height="48" />
+  ) : (
+    <svg class:list={['mark', size]} viewBox="0 0 48 48" aria-hidden="true">
+      <rect
+        x="0.5"
+        y="0.5"
+        width="47"
+        height="47"
+        fill={tile.fill}
+        stroke={tile.outlined ? '#0A0A0A' : tile.fill}
+        vector-effect="non-scaling-stroke"
+      />
+      <text x="24" y="25" fill={tile.text} text-anchor="middle" dominant-baseline="central">
+        {tribuInitial(tribu.name)}
+      </text>
+    </svg>
+  )
+}
+
+<style>
+  .mark {
+    display: block;
+    flex: none;
+    object-fit: cover;
+  }
+  text {
+    font-family: var(--font);
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .xs {
+    width: 20px;
+    height: 20px;
+  }
+  .xs text {
+    font-size: 26px;
+  }
+  .sm {
+    width: 24px;
+    height: 24px;
+  }
+  .sm text {
+    font-size: 26px;
+  }
+  .md {
+    width: 40px;
+    height: 40px;
+  }
+  .lg {
+    width: 48px;
+    height: 48px;
+  }
+  .xl {
+    width: 88px;
+    height: 88px;
+  }
+  @media (min-width: 1024px) {
+    .md {
+      width: 48px;
+      height: 48px;
+    }
+    .lg {
+      width: 56px;
+      height: 56px;
+    }
+    .xl {
+      width: 120px;
+      height: 120px;
+    }
+  }
+</style>

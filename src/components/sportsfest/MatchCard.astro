@@ -1,0 +1,115 @@
+---
+/** One match: its label and time, then each side with its score. The winner is in bold. */
+import type { MatchView, TribuInfo } from '../../db/queries/sportsfest';
+import { formatDayMonth, formatTime } from '../../lib/format';
+import TribuMark from './TribuMark.astro';
+
+interface Props {
+  match: MatchView;
+  label?: string | null;
+  tribus: Map<number, TribuInfo>;
+  /** Set when the time is already in the heading above, as in round-robin rounds. */
+  hideTime?: boolean;
+}
+
+const { match: m, label, tribus, hideTime = false } = Astro.props;
+const sides = [
+  { id: m.homeTribuId, score: m.homeScore },
+  { id: m.awayTribuId, score: m.awayScore },
+].map((s) => ({ ...s, tribu: s.id ? (tribus.get(s.id) ?? null) : null }));
+const done = m.status === 'done' || m.status === 'bye';
+const when =
+  m.startsAt && !hideTime ? `${formatDayMonth(m.startsAt)}, ${formatTime(m.startsAt)}` : null;
+const STATUS: Partial<Record<MatchView['status'], string>> = {
+  ongoing: 'Live',
+  postponed: 'Postponed',
+  cancelled: 'Cancelled',
+  bye: 'Bye',
+};
+---
+
+<article class="match">
+  {
+    (label || when || STATUS[m.status]) && (
+      <header>
+        <span class="label">{label}</span>
+        <span>{STATUS[m.status] ?? when}</span>
+      </header>
+    )
+  }
+  {
+    sides.map((s) => (
+      <div class:list={['side', { won: done && s.id !== null && s.id === m.winnerTribuId }]}>
+        {s.tribu ? <TribuMark tribu={s.tribu} size="xs" /> : <span class="tbd-mark" />}
+        <span class="name">{s.tribu?.name ?? 'To be decided'}</span>
+        <span class="score">{s.score ?? ''}</span>
+      </div>
+    ))
+  }
+  {
+    m.sets.length > 0 && (
+      <p class="sets">Sets {m.sets.map((x) => `${x.home}–${x.away}`).join(', ')}</p>
+    )
+  }
+</article>
+
+<style>
+  .match {
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--grey-300);
+    font-size: 10px;
+    line-height: 14px;
+    color: var(--grey-600);
+  }
+  .label {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .side {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--grey-600);
+  }
+  .side + .side {
+    border-top: 1px solid var(--grey-300);
+  }
+  .won {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .score {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .tbd-mark {
+    width: 20px;
+    height: 20px;
+    border: 1px dashed var(--grey-300);
+  }
+  .sets {
+    margin: 0;
+    padding: 6px 10px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 11px;
+    color: var(--grey-600);
+  }
+</style>

@@ -1,0 +1,171 @@
+---
+/** The medal tally: rank, tribu, gold, silver, bronze and total. */
+import type { Tally } from '../../db/queries/sportsfest';
+import MedalCount from './MedalCount.astro';
+import TribuChip from './TribuChip.astro';
+
+interface Props {
+  tally: Tally;
+  year: number;
+  title: string;
+}
+
+const { tally, year, title } = Astro.props;
+---
+
+<section class="band framed tally" id="tally" aria-labelledby="tally-title">
+  <div class="head">
+    <h2 id="tally-title">{title}</h2>
+    <slot name="actions">
+      <p class="note">Ranked by gold, then silver, then bronze</p>
+    </slot>
+  </div>
+  {
+    tally.length === 0 ? (
+      <p class="empty">The tribus taking part show up here once the editors add them.</p>
+    ) : (
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              <span class="visually-hidden">Rank</span>
+            </th>
+            <th scope="col">Tribu</th>
+            <th scope="col" class="num">Gold</th>
+            <th scope="col" class="num">Silver</th>
+            <th scope="col" class="num">Bronze</th>
+            <th scope="col" class="num total">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tally.map((r) => (
+            <tr>
+              <td class="rank">{r.rank}</td>
+              <th scope="row">
+                <TribuChip tribu={r.tribu} year={year} size="md" />
+              </th>
+              <td class="num">
+                <MedalCount medal={1} count={r.gold} />
+              </td>
+              <td class="num">
+                <MedalCount medal={2} count={r.silver} />
+              </td>
+              <td class="num">
+                <MedalCount medal={3} count={r.bronze} />
+              </td>
+              <td class="num total sum">{r.total}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+</section>
+
+<style>
+  .tally {
+    padding-block: 48px;
+  }
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px 16px;
+    padding-bottom: 16px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.04em;
+  }
+  .note {
+    margin: 0;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--grey-600);
+  }
+  .head :global(nav) {
+    display: flex;
+    gap: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead th {
+    padding-bottom: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--grey-600);
+    text-align: left;
+  }
+  tbody tr {
+    border-top: 1px solid var(--grey-300);
+  }
+  tbody tr:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  td,
+  tbody th {
+    padding-block: 12px;
+    font-weight: inherit;
+    text-align: left;
+  }
+  .rank {
+    width: 28px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+  .num {
+    width: 50px;
+    text-align: center;
+  }
+  .total {
+    display: none;
+  }
+  .sum {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--grey-600);
+  }
+  .empty {
+    margin: 0;
+    padding-block: 24px;
+    border-top: 1px solid var(--grey-300);
+    color: var(--grey-600);
+  }
+  @media (min-width: 768px) {
+    .total {
+      display: table-cell;
+    }
+    .num {
+      width: 120px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .tally {
+      padding-block: 96px 64px;
+    }
+    h2 {
+      font-size: 40px;
+      line-height: 44px;
+    }
+    .rank {
+      width: 112px;
+      font-size: 32px;
+    }
+    td,
+    tbody th {
+      padding-block: 14px;
+    }
+    .num {
+      width: 176px;
+    }
+  }
+</style>

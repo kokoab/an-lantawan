@@ -1,0 +1,121 @@
+---
+/** Title band of a Sportsfest page: a link back to its hub, the title, intro, and key facts. */
+interface Props {
+  title: string;
+  intro?: string | null;
+  back?: { label: string; href: string } | null;
+  facts?: Array<{ label: string; value: string }>;
+}
+
+const { title, intro, back, facts = [] } = Astro.props;
+---
+
+<section class="band framed head">
+  <div class="title-row">
+    <div class="titles">
+      {back && <a class="back" href={back.href}>{back.label}</a>}
+      <h1>{title}</h1>
+    </div>
+    {intro && <p class="intro">{intro}</p>}
+  </div>
+  <slot />
+  {
+    facts.length > 0 && (
+      <dl class="facts">
+        {facts.map((f) => (
+          <div>
+            <dt>{f.label}</dt>
+            <dd>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }
+</section>
+
+<style>
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 48px 52px;
+  }
+  .title-row {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .titles {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .back {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 16px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
+  .intro {
+    margin: 0;
+    font-size: 16px;
+    line-height: 24px;
+    color: var(--grey-600);
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 40px;
+    margin: 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--grey-300);
+  }
+  dt {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  dd {
+    margin: 2px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+  }
+  @media (min-width: 1024px) {
+    .head {
+      gap: 28px;
+      padding-block: 80px 56px;
+    }
+    .title-row {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 48px;
+    }
+    .titles {
+      gap: 28px;
+    }
+    h1 {
+      font-size: 104px;
+      line-height: 100px;
+    }
+    .intro {
+      flex: 0 0 360px;
+      font-size: 17px;
+      line-height: 26px;
+    }
+    .facts {
+      gap: 48px;
+    }
+  }
+</style>

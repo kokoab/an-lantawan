@@ -1,0 +1,54 @@
+---
+/** A tribu's small square and name, linking to its page. */
+import type { TribuInfo } from '../../db/queries/sportsfest';
+import { tribuUrl } from '../../lib/urls';
+import TribuMark from './TribuMark.astro';
+
+interface Props {
+  tribu: TribuInfo;
+  year: number;
+  size?: 'xs' | 'md';
+}
+
+const { tribu, year, size = 'xs' } = Astro.props;
+---
+
+<a class:list={['chip', size]} href={tribuUrl(year, tribu.slug)}>
+  <TribuMark tribu={tribu} size={size} />
+  <span>{tribu.name}</span>
+</a>
+
+<style>
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 18px;
+  }
+  .chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chip:hover span {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .md {
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 24px;
+    letter-spacing: -0.03em;
+  }
+  @media (min-width: 1024px) {
+    .md {
+      gap: 16px;
+      font-size: 28px;
+      line-height: 32px;
+    }
+  }
+</style>

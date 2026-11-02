@@ -1,0 +1,133 @@
+---
+/**
+ * Knockout stages drawn as columns of rounds, left to right. Each round's matches are
+ * spaced so a match sits level with the two that feed it.
+ */
+import { roundName } from '../../core/sportsfest/display';
+import type { StageView, TribuInfo } from '../../db/queries/sportsfest';
+import MatchCard from './MatchCard.astro';
+
+interface Props {
+  stages: StageView[];
+  tribus: Map<number, TribuInfo>;
+}
+
+const { stages, tribus } = Astro.props;
+
+const columns = stages.flatMap((stage) => {
+  const rounds = [...new Set(stage.matches.map((m) => m.round))].sort((a, b) => a - b);
+  return rounds.map((round, i) => {
+    const matches = stage.matches.filter((m) => m.round === round);
+    // A stage of one match, like the third-place match, is titled by its own name.
+    const single = stage.matches.length === 1;
+    const name =
+      stage.kind === 'single'
+        ? roundName(i + 1, rounds.length)
+        : { title: `${stage.name}, round ${i + 1}`, match: 'Match' };
+    const labelled = matches.map((m, n) => ({
+      match: m,
+      label: single ? stage.name : matches.length > 1 ? `${name.match} ${n + 1}` : name.match,
+    }));
+    return {
+      key: `${stage.id}-${round}`,
+      title: single ? stage.name : name.title,
+      feeds: !single && i < rounds.length - 1,
+      fed: !single && i > 0,
+      // Pairs of matches that feed the same next match.
+      pairs: Array.from({ length: Math.ceil(labelled.length / 2) }, (_, p) =>
+        labelled.slice(p * 2, p * 2 + 2),
+      ),
+    };
+  });
+});
+---
+
+<div class="bracket">
+  {
+    columns.map((c) => (
+      <section class:list={['round', { feeds: c.feeds, fed: c.fed }]} aria-label={c.title}>
+        <h3>{c.title}</h3>
+        <div class="matches">
+          {c.pairs.map((pair) => (
+            <div class:list={['pair', { both: pair.length === 2 }]}>
+              {pair.map((m) => (
+                <div class="slot">
+                  <MatchCard match={m.match} label={m.label} tribus={tribus} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+    ))
+  }
+</div>
+
+<style>
+  .bracket {
+    display: grid;
+    grid-auto-columns: minmax(240px, 1fr);
+    grid-auto-flow: column;
+    gap: 32px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  h3 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  .round {
+    display: flex;
+    flex-direction: column;
+  }
+  .matches {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+  }
+  /* Two matches spaced around their pair sit at a quarter and three quarters of its
+     height, which is where the match they feed is centred in the next column. */
+  .pair {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-around;
+  }
+  /* Padding, not gaps or margins, keeps each card centred in its slot. */
+  .slot {
+    position: relative;
+    padding-block: 8px;
+  }
+  .feeds .slot::after,
+  .fed .slot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .feeds .slot::after {
+    right: -17px;
+  }
+  .fed .slot::before {
+    left: -17px;
+  }
+  .feeds .pair.both::after {
+    content: '';
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    right: -17px;
+    border-right: 1px solid var(--grey-300);
+  }
+  @media (min-width: 1024px) {
+    .bracket {
+      grid-auto-columns: 1fr;
+      gap: 32px;
+    }
+  }
+</style>

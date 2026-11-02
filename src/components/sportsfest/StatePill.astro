@@ -1,0 +1,48 @@
+---
+/** The small status label on a medal event or match: Ongoing, Final, or when it starts. */
+import { ROW_STATE_LABEL, type RowState } from '../../core/sportsfest/display';
+
+interface Props {
+  state: RowState;
+  /** Replaces the label of an upcoming event, e.g. "3:00 PM" or "March 14". */
+  label?: string | null;
+}
+
+const { state, label } = Astro.props;
+---
+
+<span class:list={['state', state]}>{(state === 'upcoming' && label) || ROW_STATE_LABEL[state]}</span>
+
+<style>
+  .state {
+    display: inline-block;
+    padding: 3px 7px;
+    border: 1px solid var(--ink);
+    background: var(--white);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 14px;
+    white-space: nowrap;
+  }
+  .ongoing {
+    background: var(--sunrise);
+  }
+  .final {
+    background: var(--ink);
+    color: var(--white);
+  }
+  .upcoming {
+    border-color: var(--grey-300);
+  }
+  .postponed,
+  .cancelled {
+    border-color: var(--grey-300);
+    color: var(--grey-600);
+  }
+  @media (min-width: 1024px) {
+    .state {
+      font-size: 12px;
+      line-height: 16px;
+    }
+  }
+</style>
