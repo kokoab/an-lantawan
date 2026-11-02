@@ -1,0 +1,104 @@
+---
+/** Big page title with an intro beside it and an optional row of filter buttons. */
+export interface Filter {
+  label: string;
+  href: string;
+  current: boolean;
+}
+
+interface Props {
+  title: string;
+  intro?: string | null;
+  filters?: Filter[];
+  filtersLabel?: string;
+}
+
+const { title, intro, filters = [], filtersLabel = 'Filter' } = Astro.props;
+---
+
+<section class="band framed head">
+  <div class="title-row">
+    <h1>{title}</h1>
+    {intro && <p class="intro">{intro}</p>}
+  </div>
+  {
+    filters.length > 0 && (
+      <nav class="filters" aria-label={filtersLabel}>
+        {filters.map((f) => (
+          <a
+            class:list={['btn', f.current ? 'btn-primary' : 'btn-secondary']}
+            href={f.href}
+            aria-current={f.current ? 'page' : undefined}
+          >
+            {f.label}
+          </a>
+        ))}
+      </nav>
+    )
+  }
+</section>
+
+<style>
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 48px 62px;
+  }
+  .title-row {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 64px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
+  .intro {
+    margin: 0;
+    font-size: 16px;
+    line-height: 24px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: calc(-1 * var(--gutter));
+    padding-inline: var(--gutter);
+  }
+  .filters::-webkit-scrollbar {
+    display: none;
+  }
+  @media (min-width: 1024px) {
+    .head {
+      gap: 40px;
+      padding-block: 96px 66px;
+    }
+    .title-row {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 48px;
+    }
+    h1 {
+      font-size: 104px;
+      line-height: 100px;
+    }
+    .intro {
+      flex: 0 0 380px;
+      font-size: 17px;
+      line-height: 26px;
+    }
+    .filters {
+      margin-inline: 0;
+      padding-inline: 0;
+    }
+  }
+</style>
