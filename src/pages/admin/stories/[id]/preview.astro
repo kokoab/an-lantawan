@@ -1,0 +1,94 @@
+---
+/** How a story will look, whatever its status. Only editors reach this page. */
+import Blocks from '../../../../components/content/Blocks.astro';
+import StoryPhoto from '../../../../components/stories/StoryPhoto.astro';
+import { db } from '../../../../db/client';
+import { getMediaByIds } from '../../../../db/queries/admin/media';
+import { getStoryForEdit } from '../../../../db/queries/admin/stories';
+import Site from '../../../../layouts/Site.astro';
+import { idParam } from '../../../../lib/admin';
+import { formatDate } from '../../../../lib/format';
+
+const id = idParam(Astro.params.id);
+const story = id ? await getStoryForEdit(db, id) : null;
+if (!story) return Astro.rewrite('/404');
+const [cover] = story.coverId ? await getMediaByIds(db, [story.coverId]) : [];
+Astro.response.headers.set('X-Robots-Tag', 'noindex');
+---
+
+<Site title={`Preview: ${story.title}`}>
+  <p class="band preview-bar">
+    Preview of a {story.status} story. Readers {story.status === 'published' ? 'see the live version' : 'can’t see this yet'}.
+    <a href={`/admin/stories/${story.id}`}>Back to editing</a>
+  </p>
+  <article class="band framed preview">
+    <h1>{story.title}</h1>
+    {story.dek && <p class="dek">{story.dek}</p>}
+    <p class="meta">
+      {story.credits.length > 0 && <span>{story.credits.map((c) => c.name).join(', ')}</span>}
+      {story.publishedAt && <span>{formatDate(story.publishedAt)}</span>}
+    </p>
+    {cover && <StoryPhoto cover={{ key: cover.key, alt: cover.alt, focalX: cover.focalX, focalY: cover.focalY, width: cover.width, height: cover.height }} class="preview-cover" eager />}
+    <div class="body">
+      <Blocks blocks={story.body.content} />
+    </div>
+  </article>
+</Site>
+
+<style>
+  .preview-bar {
+    margin: 0;
+    padding-block: 12px;
+    background: var(--sunrise);
+    border-bottom: 1px solid var(--ink);
+    font-weight: 600;
+  }
+  .preview-bar a {
+    margin-left: 8px;
+    text-decoration: underline;
+  }
+  .preview {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 100%;
+    padding-block: 48px 96px;
+  }
+  h1 {
+    max-width: 900px;
+    margin: 0;
+    font-size: 48px;
+    line-height: 52px;
+    letter-spacing: -0.04em;
+  }
+  .dek {
+    max-width: 720px;
+    margin: 0;
+    font-size: 20px;
+    line-height: 29px;
+    color: var(--grey-600);
+  }
+  .meta {
+    display: flex;
+    gap: 16px;
+    margin: 0;
+    font-size: 14px;
+    color: var(--grey-600);
+  }
+  .preview :global(.preview-cover) {
+    max-width: 900px;
+    aspect-ratio: 16 / 9;
+  }
+  .body {
+    max-width: 680px;
+    font-size: 18px;
+    line-height: 30px;
+  }
+  .body :global(figure) {
+    margin: 24px 0;
+  }
+  .body :global(figcaption) {
+    font-size: 14px;
+    color: var(--grey-600);
+  }
+</style>

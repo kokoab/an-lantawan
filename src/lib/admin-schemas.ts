@@ -3,6 +3,7 @@ import {
   checkbox,
   date,
   id,
+  optionalDateTime,
   optionalId,
   optionalText,
   schoolYear,
@@ -10,7 +11,7 @@ import {
   text,
   wholeNumber,
 } from '../core/forms';
-import { ISSUE_KINDS } from '../db/schema';
+import { ISSUE_KINDS, STORY_KINDS } from '../db/schema';
 
 /** The section form. */
 export const sectionForm = z.object({
@@ -64,4 +65,23 @@ export const issueForm = z.object({
   kind: z.enum(ISSUE_KINDS, { message: 'Choose newsletter or special publication.' }),
   description: optionalText(600),
   publishedOn: date,
+});
+
+export const storyForm = z.object({
+  title: text(200, 'Give the story a headline.'),
+  slug,
+  dek: optionalText(400),
+  sectionId: id,
+  kind: z.enum(STORY_KINDS, { message: 'Choose what kind of story this is.' }),
+  publishedAt: optionalDateTime,
+  videoUrl: optionalText(500),
+  cartoonOnTop: checkbox,
+  writerPhoto: checkbox,
+  pinned: checkbox,
+  coverId: optionalId,
+  body: z.string().max(2_000_000, 'This story is too long to save in one piece.'),
+  tags: z.string().max(600),
+  creditPerson: z.array(z.string()),
+  creditRole: z.array(z.string()),
+  eventIds: z.array(z.string()),
 });

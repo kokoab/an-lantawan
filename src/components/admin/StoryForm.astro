@@ -1,0 +1,250 @@
+---
+/**
+ * The story form: headline, summary and text on the left; status, section, cover, credits,
+ * tags and options on the right. The text editor and photo pickers are Svelte islands that
+ * write into hidden fields, so the whole form saves in one post.
+ */
+import { toDateTimeInput } from '../../core/forms';
+import { CREDIT_ROLES } from '../../core/stories';
+import CoverField from './editor/CoverField.svelte';
+import StoryBody from './editor/StoryBody.svelte';
+import Field from './Field.astro';
+
+interface Props {
+  values: Record<string, unknown>;
+  errors: Record<string, string>;
+  status: 'draft' | 'scheduled' | 'published' | 'archived';
+  sections: Array<{ id: number; name: string; parentId: number | null }>;
+  people: Array<{ id: number; name: string }>;
+  events: Array<{ id: number; name: string; year: number }>;
+  credits: Array<{ personId: number | string; role: string }>;
+  eventIds: number[];
+  cover: { id: number; key: string; alt: string } | null;
+  body: string;
+  isNew: boolean;
+}
+
+const { values, errors, status, sections, people, events, credits, eventIds, cover, body, isNew } =
+  Astro.props;
+const v = (k: string) => (values[k] ?? '') as string;
+const checked = (k: string) => values[k] === true || values[k] === 'on';
+const KINDS = [
+  { value: 'article', label: 'News or feature story' },
+  { value: 'opinion', label: 'Opinion column' },
+  { value: 'editorial', label: 'Editorial' },
+  { value: 'cartoon', label: 'Editorial cartoon' },
+  { value: 'explainer', label: 'Explainer' },
+  { value: 'photo', label: 'Photo story' },
+  { value: 'video', label: 'Video' },
+  { value: 'letter', label: 'Letter (from Sumat)' },
+];
+const ROLE_LABEL: Record<string, string> = {
+  writer: 'Words',
+  photographer: 'Photos',
+  artist: 'Art and layout',
+  editor: 'Editing',
+};
+const sectionOptions = sections
+  .filter((s) => s.parentId === null)
+  .flatMap((t) => [
+    { value: t.id, label: t.name },
+    ...sections
+      .filter((s) => s.parentId === t.id)
+      .map((s) => ({ value: s.id, label: `${t.name}: ${s.name}` })),
+  ]);
+const creditRows = [...credits, { personId: '', role: 'writer' }, { personId: '', role: 'writer' }];
+const STATUS_TEXT = {
+  draft: 'Draft. Only editors can see it.',
+  scheduled: 'Scheduled. It goes live at the date below.',
+  published: 'Published. Readers can see it.',
+  archived: 'Archived. Hidden from the site.',
+};
+const date =
+  values.publishedAt instanceof Date ? toDateTimeInput(values.publishedAt) : v('publishedAt');
+const years = [...new Set(events.map((e) => e.year))];
+---
+
+{Object.keys(errors).length > 0 && <p class="admin-error-summary" role="alert">Some fields need fixing. Nothing was saved.</p>}
+
+<form class="story-form" method="post" data-unsaved>
+  <div class="story-main">
+    <Field name="title" id="story-title" label="Headline" value={v('title')} error={errors.title} maxlength={200} />
+    <Field name="dek" label="Summary" type="textarea" rows={2} value={v('dek')} error={errors.dek} maxlength={400} hint="One or two sentences under the headline, and in lists. For letters, this is the signature line." />
+    <div class="field">
+      <span class="label">Story text</span>
+      <StoryBody client:only="svelte" initial={body} />
+      {errors.body && <p class="field-error">{errors.body}</p>}
+    </div>
+  </div>
+
+  <aside class="story-side">
+    <section class="panel">
+      <h2>Status</h2>
+      <p class="panel-note">{STATUS_TEXT[status]}</p>
+      <Field
+        name="publishedAt"
+        label="Publication date and time"
+        type="datetime-local"
+        value={date}
+        error={errors.publishedAt}
+        hint="Philippine time. Leave it empty to use the moment you publish. A future time schedules the story."
+      />
+      <div class="form-actions stack">
+        {
+          status === 'draft' || status === 'archived' ? (
+            <>
+              <button class="btn btn-primary" type="submit" name="intent" value="publish">Publish</button>
+              <button class="btn btn-secondary" type="submit" name="intent" value="draft">Save draft</button>
+            </>
+          ) : status === 'scheduled' ? (
+            <>
+              <button class="btn btn-primary" type="submit" name="intent" value="save">Save</button>
+              <button class="btn btn-secondary" type="submit" name="intent" value="publish-now">Publish now</button>
+              <button class="btn btn-secondary" type="submit" name="intent" value="unpublish">Move to drafts</button>
+            </>
+          ) : (
+            <>
+              <button class="btn btn-primary" type="submit" name="intent" value="save">Update</button>
+              <button class="btn btn-secondary" type="submit" name="intent" value="unpublish" data-confirm="Take this story off the site and move it to drafts?">
+                Move to drafts
+              </button>
+            </>
+          )
+        }
+      </div>
+      <label class="check pin">
+        <input type="checkbox" name="pinned" checked={checked('pinned')} />
+        Pin to the top of the homepage
+      </label>
+    </section>
+
+    <section class="panel form">
+      <h2>Where it goes</h2>
+      <Field name="slug" label="URL name" value={v('slug')} error={errors.slug} slugFrom="story-title" hint={isNew ? 'Filled in from the headline.' : 'Changing it keeps the old link working.'} />
+      <Field name="sectionId" label="Section" type="select" empty="Choose a section" options={sectionOptions} value={v('sectionId')} error={errors.sectionId} />
+      <Field name="kind" label="Kind" type="select" options={KINDS} value={v('kind') || 'article'} error={errors.kind} />
+    </section>
+
+    <section class="panel form">
+      <h2>Photo and video</h2>
+      <CoverField client:only="svelte" initial={cover} />
+      <Field name="videoUrl" label="Video link" value={v('videoUrl')} error={errors.videoUrl} hint="For video stories: a YouTube or Google Drive link, shown at the top." />
+      <label class="check">
+        <input type="checkbox" name="cartoonOnTop" checked={checked('cartoonOnTop')} />
+        Opinion: show the cover as a cartoon above the headline
+      </label>
+      <label class="check">
+        <input type="checkbox" name="writerPhoto" checked={checked('writerPhoto')} />
+        Opinion: show the writer’s photo beside the byline
+      </label>
+    </section>
+
+    <section class="panel form">
+      <h2>Credits</h2>
+      {errors.credits && <p class="field-error">{errors.credits}</p>}
+      {
+        creditRows.map((c, i) => (
+          <div class="credit">
+            <select name="creditPerson" aria-label={`Credit ${i + 1}: person`}>
+              <option value="">Nobody</option>
+              {people.map((p) => (
+                <option value={p.id} selected={String(p.id) === String(c.personId)}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select name="creditRole" aria-label={`Credit ${i + 1}: what they did`}>
+              {CREDIT_ROLES.map((r) => (
+                <option value={r} selected={r === c.role}>
+                  {ROLE_LABEL[r]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))
+      }
+      <p class="hint">Save to get more empty rows. Someone missing? <a href="/admin/people" target="_blank" rel="noopener">Add them under People</a>.</p>
+    </section>
+
+    <section class="panel form">
+      <h2>Tags</h2>
+      <Field name="tags" label="Tags" value={v('tags')} error={errors.tags} hint="Separate them with commas, like SSC elections, Sportsfest." />
+      {
+        events.length > 0 && (
+          <fieldset>
+            <legend>Sportsfest events this story covers</legend>
+            {years.map((y) => (
+              <details open={events.some((e) => e.year === y && eventIds.includes(e.id))}>
+                <summary class="small">Sportsfest {y}</summary>
+                <div class="events">
+                  {events
+                    .filter((e) => e.year === y)
+                    .map((e) => (
+                      <label class="check small">
+                        <input type="checkbox" name="eventIds" value={e.id} checked={eventIds.includes(e.id)} />
+                        {e.name}
+                      </label>
+                    ))}
+                </div>
+              </details>
+            ))}
+          </fieldset>
+        )
+      }
+    </section>
+  </aside>
+</form>
+
+<style>
+  .story-form {
+    display: grid;
+    gap: 24px;
+    align-items: start;
+  }
+  .story-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+  .story-main :global(#story-title) {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 30px;
+    letter-spacing: -0.03em;
+  }
+  .story-side {
+    min-width: 0;
+  }
+  .stack {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pin {
+    margin-top: 16px;
+  }
+  .credit {
+    display: grid;
+    grid-template-columns: 1fr 130px;
+    gap: 6px;
+  }
+  .events {
+    display: grid;
+    gap: 6px;
+    padding: 8px 0;
+  }
+  .hint a {
+    text-decoration: underline;
+  }
+  @media (min-width: 1200px) {
+    .story-form {
+      grid-template-columns: minmax(0, 1fr) 340px;
+    }
+    .story-side {
+      position: sticky;
+      top: 16px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+  }
+</style>

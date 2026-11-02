@@ -1,0 +1,56 @@
+---
+import StoryForm from '../../../components/admin/StoryForm.astro';
+import { emptyDoc } from '../../../core/content/doc';
+import { db } from '../../../db/client';
+import Admin from '../../../layouts/Admin.astro';
+import { editorOf, one, readForm } from '../../../lib/admin';
+import {
+  coverFromForm,
+  creditsFromForm,
+  formList,
+  storyFormChoices,
+} from '../../../lib/story-form-data';
+import { saveStoryForm } from '../../../lib/story-save';
+
+const editor = editorOf(Astro);
+const choices = await storyFormChoices(db);
+const asked = Number(Astro.url.searchParams.get('section'));
+let values: Record<string, unknown> = {
+  kind: 'article',
+  sectionId: Number.isInteger(asked) && asked > 0 ? asked : '',
+};
+let errors: Record<string, string> = {};
+let body = JSON.stringify(emptyDoc());
+let credits: Array<{ personId: number | string; role: string }> = [];
+let eventIds: number[] = [];
+let cover: { id: number; key: string; alt: string } | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const saved = await saveStoryForm(db, form, editor, null);
+  if (saved.ok) return Astro.redirect(`/admin/stories/${saved.id}?done=${saved.done}`, 303);
+  values = form;
+  errors = saved.errors;
+  body = one(form, 'body') || body;
+  credits = creditsFromForm(form);
+  eventIds = formList(form, 'eventIds').map(Number);
+  cover = await coverFromForm(db, form);
+  Astro.response.status = 422;
+}
+---
+
+<Admin title="New story" section="stories" back={{ label: 'Stories', href: '/admin/stories' }}>
+  <StoryForm
+    values={values}
+    errors={errors}
+    status="draft"
+    sections={choices.sections}
+    people={choices.people}
+    events={choices.events}
+    credits={credits}
+    eventIds={eventIds}
+    cover={cover}
+    body={body}
+    isNew
+  />
+</Admin>

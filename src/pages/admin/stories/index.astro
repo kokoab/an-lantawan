@@ -1,0 +1,153 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import { parsePage } from '../../../core/paging';
+import { db } from '../../../db/client';
+import { listAllSections } from '../../../db/queries/admin/sections';
+import {
+  listAdminStories,
+  type StoryKind,
+  type StoryStatus,
+} from '../../../db/queries/admin/stories';
+import { STORY_KINDS, STORY_STATUSES } from '../../../db/schema';
+import Admin from '../../../layouts/Admin.astro';
+import { formatStamp } from '../../../lib/format';
+import { mediaUrl } from '../../../lib/urls';
+
+const params = Astro.url.searchParams;
+const status = (STORY_STATUSES as readonly string[]).includes(params.get('status') ?? '')
+  ? (params.get('status') as StoryStatus)
+  : null;
+const kind = (STORY_KINDS as readonly string[]).includes(params.get('kind') ?? '')
+  ? (params.get('kind') as StoryKind)
+  : null;
+const sectionId = Number(params.get('section')) || null;
+const q = (params.get('q') ?? '').trim().slice(0, 100);
+const page = parsePage(params.get('page')) ?? 1;
+
+const [sections, list] = await Promise.all([
+  listAllSections(db),
+  listAdminStories(db, { status, sectionId, kind, q, page, perPage: 30 }),
+]);
+const STATUS = {
+  draft: 'Draft',
+  scheduled: 'Scheduled',
+  published: 'Published',
+  archived: 'Archived',
+};
+const KIND: Record<string, string> = {
+  article: 'Story',
+  opinion: 'Opinion',
+  editorial: 'Editorial',
+  cartoon: 'Cartoon',
+  explainer: 'Explainer',
+  photo: 'Photos',
+  video: 'Video',
+  letter: 'Letter',
+};
+const href = (p: number) => {
+  const u = new URLSearchParams(params);
+  if (p > 1) u.set('page', String(p));
+  else u.delete('page');
+  return `/admin/stories${u.size ? `?${u}` : ''}`;
+};
+const filtered = Boolean(status || kind || sectionId || q);
+---
+
+<Admin title="Stories" section="stories">
+  <a slot="actions" class="btn btn-primary" href="/admin/stories/new">Write a story</a>
+
+  <form class="toolbar" method="get" role="search">
+    <Field name="q" label="Headline" type="search" value={q} placeholder="Words in the headline" />
+    <div class="field narrow">
+      <label for="f-status">Status</label>
+      <select id="f-status" name="status" data-autosubmit>
+        <option value="">Any</option>
+        {STORY_STATUSES.map((s) => <option value={s} selected={s === status}>{STATUS[s]}</option>)}
+      </select>
+    </div>
+    <div class="field narrow">
+      <label for="f-section">Section</label>
+      <select id="f-section" name="section" data-autosubmit>
+        <option value="">Any</option>
+        {sections.map((s) => <option value={s.id} selected={s.id === sectionId}>{s.name}</option>)}
+      </select>
+    </div>
+    <div class="field narrow">
+      <label for="f-kind">Kind</label>
+      <select id="f-kind" name="kind" data-autosubmit>
+        <option value="">Any</option>
+        {STORY_KINDS.map((k) => <option value={k} selected={k === kind}>{KIND[k]}</option>)}
+      </select>
+    </div>
+    <button class="btn btn-secondary" type="submit">Find</button>
+  </form>
+
+  <p class="muted small count">
+    <span>{list.total} {list.total === 1 ? 'story' : 'stories'}</span>
+    {filtered && <a href="/admin/stories">Clear filters</a>}
+  </p>
+
+  {
+    list.rows.length === 0 ? (
+      <div class="empty-state">
+        <h2>{filtered ? 'No stories match' : 'No stories yet'}</h2>
+        <p>{filtered ? 'Try other words or filters.' : 'Write the first one.'}</p>
+        <a class="btn btn-primary" href={filtered ? '/admin/stories' : '/admin/stories/new'}>
+          {filtered ? 'Show all stories' : 'Write a story'}
+        </a>
+      </div>
+    ) : (
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">Cover</span></th>
+              <th scope="col">Headline</th>
+              <th scope="col" class="hide-sm">Section</th>
+              <th scope="col">Status</th>
+              <th scope="col" class="hide-sm">Last edited</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.rows.map((s) => (
+              <tr>
+                <td>{s.coverKey ? <img class="thumb" src={mediaUrl(s.coverKey)} alt="" loading="lazy" /> : <span class="thumb" />}</td>
+                <th scope="row">
+                  <a href={`/admin/stories/${s.id}`}>{s.title}</a>
+                  {s.kind !== 'article' && <span class="muted small"> {KIND[s.kind]}</span>}
+                </th>
+                <td class="muted hide-sm">{s.section}</td>
+                <td>
+                  <span class:list={['badge', { ink: s.status === 'published', sun: s.status === 'scheduled' }]}>{STATUS[s.status]}</span>
+                </td>
+                <td class="muted small hide-sm">{formatStamp(s.updatedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+  {
+    list.pages > 1 && (
+      <nav class="pager" aria-label="Pages">
+        {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Previous</a> : <span />}
+        <span class="muted small">Page {page} of {list.pages}</span>
+        {page < list.pages ? <a class="btn btn-secondary" href={href(page + 1)}>Next</a> : <span />}
+      </nav>
+    )
+  }
+</Admin>
+
+<style>
+  .thumb {
+    display: block;
+  }
+  .count {
+    display: flex;
+    gap: 12px;
+  }
+  .muted a {
+    text-decoration: underline;
+  }
+</style>

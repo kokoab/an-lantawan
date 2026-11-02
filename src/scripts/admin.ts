@@ -42,3 +42,20 @@ for (const input of document.querySelectorAll<HTMLElement>('[data-slug-from]')) 
       .replace(/-+$/, '');
   });
 }
+
+// Forms marked data-unsaved warn before leaving with changes that weren't saved.
+for (const form of document.querySelectorAll<HTMLFormElement>('form[data-unsaved]')) {
+  let dirty = false;
+  form.addEventListener('input', () => {
+    dirty = true;
+  });
+  form.addEventListener('change', () => {
+    dirty = true;
+  });
+  form.addEventListener('submit', () => {
+    dirty = false;
+  });
+  window.addEventListener('beforeunload', (event) => {
+    if (dirty) event.preventDefault();
+  });
+}
