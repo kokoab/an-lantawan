@@ -1,0 +1,153 @@
+---
+import Field from '../../components/admin/Field.astro';
+import {
+  readSetting,
+  SETTING_GROUPS,
+  SETTINGS,
+  type SettingDef,
+  type SettingKey,
+} from '../../core/settings';
+import { db } from '../../db/client';
+import { getSettings, saveSettings } from '../../db/queries/settings';
+import Admin from '../../layouts/Admin.astro';
+import { doneRedirect, editorOf, readForm, record } from '../../lib/admin';
+
+const editor = editorOf(Astro);
+const requested = Astro.url.searchParams.get('group');
+const group = SETTING_GROUPS.find((g) => g.id === requested) ?? SETTING_GROUPS[0];
+const keys = (Object.keys(SETTINGS) as SettingKey[]).filter((k) => SETTINGS[k].group === group.id);
+const defaults = Object.fromEntries(keys.map((k) => [k, SETTINGS[k].default]));
+
+let values: Record<string, unknown> = await getSettings(db, defaults);
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const get = (n: string) => {
+    const v = form[n];
+    return (Array.isArray(v) ? v[0] : v) ?? null;
+  };
+  const getAll = (n: string) => {
+    const v = form[n];
+    return v === undefined ? [] : Array.isArray(v) ? v : [v];
+  };
+  const next: Record<string, unknown> = {};
+  for (const key of keys) {
+    const r = readSetting(key, get, getAll);
+    if (r.ok) next[key] = r.value;
+    else errors[key] = r.error;
+  }
+  if (Object.keys(errors).length === 0) {
+    await saveSettings(db, next, editor.id);
+    await record(editor, {
+      action: 'update',
+      entityType: 'settings',
+      summary: `Changed the ${group.label.toLowerCase()} text`,
+    });
+    return doneRedirect(Astro, `/admin/settings?group=${group.id}`, 'saved');
+  }
+  values = { ...values, ...next };
+  for (const key of Object.keys(errors)) values[key] = get(key) ?? values[key];
+  Astro.response.status = 422;
+}
+
+const asDef = (k: SettingKey): SettingDef => SETTINGS[k];
+const rowsOf = (k: SettingKey) => {
+  const v = values[k];
+  return Array.isArray(v) ? (v as Record<string, string>[]) : [];
+};
+// Two empty rows under the filled ones, for adding more.
+const BLANK_ROWS = 2;
+---
+
+<Admin title="Site text" section="settings">
+  <nav class="tabs" aria-label="Groups">
+    {
+      SETTING_GROUPS.map((g) => (
+        <a
+          class:list={['btn', g.id === group.id ? 'btn-primary' : 'btn-secondary']}
+          href={`/admin/settings?group=${g.id}`}
+          aria-current={g.id === group.id ? 'page' : undefined}
+        >
+          {g.label}
+        </a>
+      ))
+    }
+  </nav>
+
+  {Object.keys(errors).length > 0 && <p class="admin-error-summary" role="alert">Some fields need fixing. Nothing was saved.</p>}
+
+  <form class="panel form" method="post">
+    <p class="panel-note">{group.note}</p>
+    {
+      keys.map((k) => {
+        const def = asDef(k);
+        if (def.type === 'rows') {
+          const rows = [...rowsOf(k), ...Array.from({ length: BLANK_ROWS }, () => ({}))];
+          return (
+            <fieldset class="rows">
+              <legend>{def.label}</legend>
+              {def.help && <p class="hint">{def.help}</p>}
+              <p class="hint">Clear every box of a row to remove it. Fill the empty rows to add more.</p>
+              {rows.map((row: Record<string, string>, i) => (
+                <div class="rows-item">
+                  {def.fields.map((f) => (
+                    <Field
+                      name={`${k}.${f.name}`}
+                      id={`${k}-${f.name}-${i}`}
+                      label={`${f.label} ${i + 1}`}
+                      type={f.long ? 'textarea' : 'text'}
+                      rows={2}
+                      value={row[f.name] ?? ''}
+                    />
+                  ))}
+                </div>
+              ))}
+              {errors[k] && <p class="field-error">{errors[k]}</p>}
+            </fieldset>
+          );
+        }
+        return (
+          <Field
+            name={k}
+            label={def.label}
+            type={def.type === 'textarea' ? 'textarea' : def.type === 'number' ? 'number' : def.type === 'url' ? 'url' : 'text'}
+            value={values[k] as string | number}
+            hint={def.help ?? null}
+            error={errors[k]}
+            rows={3}
+            min={def.type === 'number' ? def.min : undefined}
+            max={def.type === 'number' ? def.max : undefined}
+          />
+        );
+      })
+    }
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Save {group.label.toLowerCase()}</button>
+    </div>
+  </form>
+</Admin>
+
+<style>
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .rows {
+    padding-top: 8px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .rows-item {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--grey-300);
+  }
+  @media (min-width: 768px) {
+    .rows-item {
+      grid-template-columns: 1fr 2fr;
+    }
+  }
+</style>
