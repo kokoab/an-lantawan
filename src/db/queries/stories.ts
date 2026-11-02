@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, notInArray, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, notInArray, type SQL, sql } from 'drizzle-orm';
 import type { Db } from '../client';
 import { media, people, sections, stories, storyAuthors } from '../schema';
 
@@ -185,4 +185,33 @@ export async function getBody(db: Db, id: number) {
     .where(eq(stories.id, id))
     .limit(1);
   return row?.body ?? null;
+}
+
+/** Published stories matching a full-text query, best matches first. */
+export async function searchStories(
+  db: Db,
+  {
+    fts,
+    sectionIds,
+    page,
+    perPage,
+  }: { fts: string; sectionIds: number[]; page: number; perPage: number },
+) {
+  const inSection = sectionIds.length ? inArray(stories.sectionId, sectionIds) : undefined;
+  const match = sql`${stories.id} IN (SELECT rowid FROM stories_fts WHERE stories_fts MATCH ${fts})`;
+  const where = and(published, match, inSection);
+  const [{ total }] = await db.select({ total: count() }).from(stories).where(where);
+  const rows = await db
+    .select(summaryColumns)
+    .from(stories)
+    .innerJoin(sections, eq(sections.id, stories.sectionId))
+    .leftJoin(media, eq(media.id, stories.coverId))
+    .where(where)
+    .orderBy(
+      sql`(SELECT rank FROM stories_fts WHERE stories_fts.rowid = ${stories.id} AND stories_fts MATCH ${fts})`,
+      desc(stories.publishedAt),
+    )
+    .limit(perPage)
+    .offset((page - 1) * perPage);
+  return { stories: rows.map(toSummary), total, pages: Math.max(1, Math.ceil(total / perPage)) };
 }
