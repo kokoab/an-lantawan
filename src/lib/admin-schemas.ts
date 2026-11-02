@@ -2,16 +2,26 @@ import { z } from 'zod';
 import {
   checkbox,
   date,
+  hexColor,
   id,
+  optionalDate,
   optionalDateTime,
   optionalId,
+  optionalScore,
   optionalText,
   schoolYear,
   slug,
   text,
   wholeNumber,
 } from '../core/forms';
-import { ISSUE_KINDS, STORY_KINDS } from '../db/schema';
+import {
+  EVENT_STATUSES,
+  EVENT_TYPES,
+  ISSUE_KINDS,
+  MATCH_STATUSES,
+  SPORTSFEST_STATUSES,
+  STORY_KINDS,
+} from '../db/schema';
 
 /** The section form. */
 export const sectionForm = z.object({
@@ -100,3 +110,52 @@ export const letterForm = z.object({
 });
 
 export const notesForm = z.object({ notes: optionalText(2000) });
+
+export const tribuForm = z.object({
+  name: text(60, 'Name the tribu.'),
+  slug,
+  color: hexColor,
+  sort: wholeNumber(0, 999),
+});
+
+export const sportsfestForm = z.object({
+  year: wholeNumber(2000, 2100),
+  name: text(80, 'Name it, like Sportsfest 2027.'),
+  theme: optionalText(200),
+  status: z.enum(SPORTSFEST_STATUSES, { message: 'Choose where it stands.' }),
+  startsOn: optionalDate,
+  endsOn: optionalDate,
+  tribuIds: z.array(z.string()),
+});
+
+export const eventForm = z.object({
+  name: text(80, 'Name the event, like Basketball.'),
+  slug,
+  type: z.enum(EVENT_TYPES, { message: 'Choose how it is decided.' }),
+  status: z.enum(EVENT_STATUSES, { message: 'Choose where it stands.' }),
+  venue: optionalText(120),
+  startsAt: optionalDateTime,
+  note: optionalText(300),
+  categories: optionalText(400),
+});
+
+export const categoryForm = z.object({
+  name: text(60, 'Name the category, like Women’s.'),
+  sort: wholeNumber(0, 99),
+});
+
+export const matchForm = z.object({
+  homeScore: optionalScore,
+  awayScore: optionalScore,
+  status: z.enum(MATCH_STATUSES),
+  startsAt: optionalDateTime,
+  venue: optionalText(120),
+  homeTribuId: optionalId,
+  awayTribuId: optionalId,
+});
+
+export const pointsForm = z.object({
+  win: z.coerce.number().min(0).max(10),
+  draw: z.coerce.number().min(0).max(10),
+  loss: z.coerce.number().min(0).max(10),
+});

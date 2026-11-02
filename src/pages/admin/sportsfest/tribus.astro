@@ -1,0 +1,169 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import PhotoField from '../../../components/admin/PhotoField.astro';
+import TribuMark from '../../../components/sportsfest/TribuMark.astro';
+import { parseForm } from '../../../core/forms';
+import { db } from '../../../db/client';
+import {
+  createTribu,
+  listAllTribus,
+  setTribuArchived,
+  tribuSlugTaken,
+  updateTribu,
+} from '../../../db/queries/admin/sportsfest';
+import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readFormWithFiles, record } from '../../../lib/admin';
+import { tribuForm } from '../../../lib/admin-schemas';
+import { resolveUpload } from '../../../lib/uploads';
+
+const editor = editorOf(Astro);
+const tribus = await listAllTribus(db);
+let failed: {
+  id: number | null;
+  errors: Record<string, string>;
+  values: Record<string, unknown>;
+} | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readFormWithFiles(Astro.request);
+  const intent = one(form.values, 'intent');
+  const id = Number(one(form.values, 'tribuId')) || null;
+  const tribu = id ? tribus.find((t) => t.id === id) : null;
+  if ((intent === 'archive' || intent === 'restore') && tribu) {
+    await setTribuArchived(db, tribu.id, intent === 'archive');
+    await record(editor, {
+      action: intent,
+      entityType: 'tribu',
+      entityId: tribu.id,
+      summary: `${intent === 'archive' ? 'Archived' : 'Restored'} the ${tribu.name} tribu`,
+    });
+    return doneRedirect(
+      Astro,
+      '/admin/sportsfest/tribus',
+      intent === 'archive' ? 'archived' : 'restored',
+    );
+  }
+  const parsed = parseForm(tribuForm, form.values);
+  const errors: Record<string, string> = parsed.ok ? {} : parsed.errors;
+  if (parsed.ok && (await tribuSlugTaken(db, parsed.data.slug, tribu?.id ?? null)))
+    errors.slug = 'Another tribu uses this URL name.';
+  if (parsed.ok && !Object.keys(errors).length) {
+    const logo = await resolveUpload(
+      db,
+      {
+        name: 'logo',
+        current: tribu?.logoId ?? null,
+        want: 'image',
+        alt: `${parsed.data.name} logo`,
+      },
+      form,
+      editor.id,
+    );
+    if (!logo.ok) errors.logo = logo.error;
+    else {
+      const input = { ...parsed.data, logoId: logo.id };
+      const savedId = tribu ? tribu.id : await createTribu(db, input);
+      if (tribu) await updateTribu(db, tribu.id, input);
+      await record(editor, {
+        action: tribu ? 'update' : 'create',
+        entityType: 'tribu',
+        entityId: savedId,
+        summary: `${tribu ? 'Edited' : 'Added'} the ${parsed.data.name} tribu`,
+      });
+      return doneRedirect(Astro, '/admin/sportsfest/tribus', tribu ? 'saved' : 'created');
+    }
+  }
+  failed = { id: tribu?.id ?? null, errors, values: form.values };
+  Astro.response.status = 422;
+}
+
+const valuesFor = (t: (typeof tribus)[number] | null) =>
+  failed && failed.id === (t?.id ?? null)
+    ? failed.values
+    : t
+      ? { ...t }
+      : { color: '#6B6B68', sort: String(tribus.length + 1) };
+const errorsFor = (t: (typeof tribus)[number] | null) =>
+  failed && failed.id === (t?.id ?? null) ? failed.errors : {};
+---
+
+<Admin title="Tribus" section="tribus">
+  <p class="panel-note">
+    Tribus carry over from year to year. Each Sportsfest picks which tribus take part. Archive a tribu that no longer competes: its past results stay.
+  </p>
+  <div class="tribus">
+    {
+      [...tribus, null].map((t) => {
+        const v = valuesFor(t);
+        const e = errorsFor(t);
+        const s = (k: string) => (v[k] ?? '') as string;
+        return (
+          <form class:list={['panel', 'form', { archived: t?.archivedAt }]} method="post" enctype="multipart/form-data">
+            <div class="panel-head">
+              <h2>
+                {t ? (
+                  <span class="title">
+                    <TribuMark tribu={t} size="md" />
+                    {t.name}
+                    {t.archivedAt && <span class="badge">Archived</span>}
+                  </span>
+                ) : (
+                  'Add a tribu'
+                )}
+              </h2>
+            </div>
+            {t && <input type="hidden" name="tribuId" value={t.id} />}
+            <div class="row two">
+              <Field name="name" id={`name-${t?.id ?? 'new'}`} label="Name" value={s('name')} error={e.name} maxlength={60} />
+              <Field name="slug" id={`slug-${t?.id ?? 'new'}`} label="URL name" value={s('slug')} error={e.slug} slugFrom={`name-${t?.id ?? 'new'}`} />
+            </div>
+            <div class="row two">
+              <Field name="color" id={`color-${t?.id ?? 'new'}`} label="Colour" type="color" value={s('color')} error={e.color} hint="Used for its square on every Sportsfest page." />
+              <Field name="sort" id={`sort-${t?.id ?? 'new'}`} label="Order" type="number" min={0} max={999} value={s('sort')} error={e.sort} />
+            </div>
+            <PhotoField name="logo" label="Logo" current={t?.logoKey ? { key: t.logoKey } : null} error={e.logo} hint="Optional. Without one, the square shows the first letter on the colour." />
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit" name="intent" value="save">{t ? 'Save' : 'Add tribu'}</button>
+              {t && (
+                <button
+                  class:list={['btn', t.archivedAt ? 'btn-secondary' : 'btn-danger']}
+                  type="submit"
+                  name="intent"
+                  value={t.archivedAt ? 'restore' : 'archive'}
+                  formnovalidate
+                  data-confirm={t.archivedAt ? undefined : `Archive ${t.name}? It won’t be offered for new Sportsfests. Past results stay.`}
+                >
+                  {t.archivedAt ? 'Restore' : 'Archive'}
+                </button>
+              )}
+            </div>
+          </form>
+        );
+      })
+    }
+  </div>
+</Admin>
+
+<style>
+  .tribus {
+    display: grid;
+    gap: 16px;
+  }
+  .tribus .panel {
+    min-width: 0;
+    margin: 0;
+  }
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .archived {
+    opacity: 0.7;
+  }
+  @media (min-width: 1200px) {
+    .tribus {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
