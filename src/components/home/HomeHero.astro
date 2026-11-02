@@ -1,5 +1,6 @@
 ---
 /** The lead story beside the Latest list. On phones, Latest becomes its own band below. */
+import { leadShape } from '../../core/content/photo';
 import type { StorySummary } from '../../db/queries/stories';
 import { formatDate, isoDate } from '../../lib/format';
 import { storyLabel, storyUrl } from '../../lib/urls';
@@ -15,13 +16,19 @@ interface Props {
 const { lead, minutes, latest } = Astro.props;
 const href = storyUrl(lead);
 const isExplainer = lead.kind === 'explainer';
+// The frame takes the photo's own shape, so no grey bars show beside it.
+const shape = lead.cover ? leadShape(lead.cover.width, lead.cover.height) : null;
 ---
 
 <section class="band framed hero">
-  <article class="lead">
-    <a class="lead-photo-link" href={href} tabindex="-1" aria-hidden="true">
-      <StoryPhoto cover={lead.cover} class="lead-photo" eager />
-    </a>
+  <article class:list={['lead', shape ? `is-${shape.layout}` : 'no-photo']}>
+    {
+      shape && (
+        <a class="lead-photo-link" href={href} tabindex="-1" aria-hidden="true">
+          <StoryPhoto cover={lead.cover} class={`lead-photo r-${shape.ratio}`} eager fitted />
+        </a>
+      )
+    }
     <div class="text">
       <span class="pill">{storyLabel(lead)}</span>
       <h1><a href={href}>{lead.title}</a></h1>
@@ -60,8 +67,34 @@ const isExplainer = lead.kind === 'explainer';
     gap: 20px;
   }
   .hero :global(.lead-photo) {
-    height: 260px;
     border: 0;
+  }
+  .hero :global(.r-4x3) {
+    aspect-ratio: 4 / 3;
+  }
+  .hero :global(.r-3x2) {
+    aspect-ratio: 3 / 2;
+  }
+  .hero :global(.r-16x9) {
+    aspect-ratio: 16 / 9;
+  }
+  .hero :global(.r-2x1) {
+    aspect-ratio: 2 / 1;
+  }
+  .hero :global(.r-1x1) {
+    aspect-ratio: 1;
+  }
+  .hero :global(.r-4x5) {
+    aspect-ratio: 4 / 5;
+  }
+  .hero :global(.r-3x4) {
+    aspect-ratio: 3 / 4;
+  }
+  .hero :global(.r-2x3) {
+    aspect-ratio: 2 / 3;
+  }
+  .no-photo {
+    padding-top: 32px;
   }
   .text {
     display: flex;
@@ -150,9 +183,26 @@ const isExplainer = lead.kind === 'explainer';
       gap: 28px;
     }
     .hero :global(.lead-photo) {
-      height: auto;
-      aspect-ratio: 792 / 392;
       border: 1px solid var(--grey-300);
+    }
+    .no-photo {
+      padding-top: 0;
+    }
+    /* Square and tall pictures sit beside the headline instead of above it. */
+    .is-side {
+      flex-direction: row;
+      align-items: center;
+    }
+    .is-side .lead-photo-link {
+      flex: 0 0 44%;
+    }
+    .is-side .text {
+      flex: 1;
+      min-width: 0;
+    }
+    .is-side h1 {
+      font-size: 44px;
+      line-height: 47px;
     }
     .text {
       gap: 18px;

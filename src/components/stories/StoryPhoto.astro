@@ -7,12 +7,14 @@ interface Props {
   class?: string;
   /** The first photo on a page loads right away; the rest load as they scroll in. */
   eager?: boolean;
+  /** Set when the frame already matches the picture's shape, so it never needs letterboxing. */
+  fitted?: boolean;
 }
 
-const { cover, class: className, eager = false } = Astro.props;
+const { cover, class: className, eager = false, fitted = false } = Astro.props;
 ---
 
-<div class:list={['photo', className, cover && showWhole(cover) && 'whole']}>
+<div class:list={['photo', className, !fitted && cover && showWhole(cover) && 'whole']}>
   {
     cover && (
       <img
