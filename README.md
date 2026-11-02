@@ -29,11 +29,35 @@ GitHub runs the same checks on every push.
 
 | Folder | What's in it |
 |---|---|
-| `src/core/` | Rules that don't need a database: medal tally, standings, brackets, Sumat checks. Each has a `.test.ts` beside it. |
+| `src/core/` | Rules that don't need a database: medal tally, standings, brackets, publishing, uploads, form fields, Sumat checks. Each has a `.test.ts` beside it. |
+| `src/core/settings.ts` | Every line of site copy editors can change, with its default |
 | `src/db/schema/` | Database tables and how they relate |
-| `src/db/queries/` | Reading and writing the database |
-| `src/pages/` | One file per page or route. `src/pages/api/` holds JSON endpoints. |
+| `src/db/queries/` | Reading and writing the database. `admin/` holds what only the admin uses. |
+| `src/pages/` | One file per page or route. `src/pages/admin/` is the admin, `src/pages/api/` holds JSON endpoints. |
+| `src/components/admin/` | Admin form parts. `editor/` is the story editor (Svelte and Tiptap). |
 | `migrations/` | Database changes, applied in order |
+
+## Editing the site
+
+Everything on the public site is edited at `/admin`:
+
+| To change | Go to |
+|---|---|
+| Stories, letters, explainers, cartoons, the pinned homepage story | Stories |
+| Photos and PDFs, their descriptions, credits and crop | Photos and files |
+| Newsletters and special publications | Print issues |
+| Writers, photographers, the editorial board | People |
+| Sumat messages, publishing them as letters | Sumat inbox |
+| The Sumat question, opening and closing Sumat | Sumat prompts |
+| Sportsfests, events, results, brackets, scores | Sportsfests |
+| Tribu names, colours and logos | Tribus |
+| Site name, tagline, About page, page intros, Sumat wording | Site text |
+| Sections and their descriptions | Sections |
+| Header, menu panel and footer links | Menus |
+| Old addresses that should lead somewhere new | Redirects |
+| Who can sign in | Editors |
+
+A story scheduled for later goes live by itself at its time; nothing needs to run. To give someone admin access, add their Google email under Editors. While the Google sign-in app is in testing mode, also add them as a test user in Google Cloud.
 
 ## Changing the database
 
