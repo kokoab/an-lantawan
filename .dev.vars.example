@@ -1,0 +1,8 @@
+# Copy to .dev.vars for local development. .dev.vars is never committed.
+# Cloudflare's Turnstile test keys: always pass, work on localhost.
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+# Google sign-in: a client from Google Cloud Console with
+# http://localhost:4321/auth/callback as a redirect URI.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
