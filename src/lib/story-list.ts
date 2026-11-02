@@ -1,14 +1,19 @@
 import { STORIES_PER_PAGE } from '../core/paging';
 import type { Db } from '../db/client';
-import { listStories, listTopSections } from '../db/queries/stories';
+import { listStories, listTopSections, type StorySummary } from '../db/queries/stories';
 
 /** Data for a story list page. `current` is the section slug, or null for All stories. */
 export async function loadStoryList(
   db: Db,
-  { current, sectionIds, page }: { current: string | null; sectionIds: number[]; page: number },
+  {
+    current,
+    sectionIds,
+    kind,
+    page,
+  }: { current: string | null; sectionIds: number[]; kind?: StorySummary['kind']; page: number },
 ) {
   const [result, sections] = await Promise.all([
-    listStories(db, { sectionIds, page, perPage: STORIES_PER_PAGE }),
+    listStories(db, { sectionIds, kind, page, perPage: STORIES_PER_PAGE }),
     listTopSections(db),
   ]);
   const filters = [

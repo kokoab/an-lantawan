@@ -1,0 +1,30 @@
+---
+import StoryList from '../components/stories/StoryList.astro';
+import { parsePage } from '../core/paging';
+import { db } from '../db/client';
+import Site from '../layouts/Site.astro';
+import { loadStoryList } from '../lib/story-list';
+
+// Explainers live in whichever section their topic belongs to; this page gathers them.
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (!page) return Astro.rewrite('/404');
+const list = await loadStoryList(db, { current: null, sectionIds: [], kind: 'explainer', page });
+if (page > list.pages) return Astro.rewrite('/404');
+const filters = list.filters.map((f) => ({ ...f, current: false }));
+const pageHref = (p: number) => (p === 1 ? '/explainers' : `/explainers?page=${p}`);
+const intro = 'What a law, a policy or a controversy means for LNU students, explained.';
+---
+
+<Site title={page === 1 ? 'Explainers' : `Explainers, page ${page}`} description={intro}>
+  <StoryList
+    title="Explainers"
+    intro={intro}
+    filters={filters}
+    lead={list.lead}
+    grid={list.grid}
+    total={list.total}
+    page={page}
+    pages={list.pages}
+    pageHref={pageHref}
+  />
+</Site>

@@ -93,15 +93,22 @@ export async function listTopSections(db: Db) {
 
 /**
  * Published stories, newest first. Page 1 starts with a lead story followed by a grid;
- * later pages are grid only. `sectionIds` empty means every section.
+ * later pages are grid only. `sectionIds` empty means every section; `kind` narrows to one kind.
  */
 export async function listStories(
   db: Db,
-  { sectionIds, page, perPage }: { sectionIds: number[]; page: number; perPage: number },
+  {
+    sectionIds,
+    kind,
+    page,
+    perPage,
+  }: { sectionIds: number[]; kind?: StorySummary['kind']; page: number; perPage: number },
 ) {
-  const where = sectionIds.length
-    ? and(published, inArray(stories.sectionId, sectionIds))
-    : published;
+  const where = and(
+    published,
+    sectionIds.length ? inArray(stories.sectionId, sectionIds) : undefined,
+    kind ? eq(stories.kind, kind) : undefined,
+  );
 
   const [{ total }] = await db.select({ total: count() }).from(stories).where(where);
   const leadCount = 1;
