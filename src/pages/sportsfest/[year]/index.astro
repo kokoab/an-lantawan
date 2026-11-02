@@ -1,0 +1,432 @@
+---
+import Coverage from '../../../components/sportsfest/Coverage.astro';
+import EventsTable from '../../../components/sportsfest/EventsTable.astro';
+import MedalCount from '../../../components/sportsfest/MedalCount.astro';
+import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro';
+import TallyTable from '../../../components/sportsfest/TallyTable.astro';
+import TribuMark from '../../../components/sportsfest/TribuMark.astro';
+import {
+  countWords,
+  festivalDay,
+  manilaDay,
+  ordinal,
+  rowState,
+  scheduleDays,
+} from '../../../core/sportsfest/display';
+import { db } from '../../../db/client';
+import {
+  getSportsfest,
+  getTally,
+  listCoverage,
+  listEventRows,
+} from '../../../db/queries/sportsfest';
+import Site from '../../../layouts/Site.astro';
+import { formatDayMonth, formatDayRange } from '../../../lib/format';
+import { sportsfestFromParam } from '../../../lib/sportsfest-page';
+import { tribuUrl } from '../../../lib/urls';
+
+const sf = await sportsfestFromParam(Astro.params.year);
+if (!sf) return Astro.rewrite('/404');
+
+const [tally, rows, coverage, previous] = await Promise.all([
+  getTally(db, sf),
+  listEventRows(db, sf.id),
+  listCoverage(db, sf.id),
+  sf.status === 'upcoming' ? getSportsfest(db, sf.year - 1) : null,
+]);
+const previousTally = previous ? await getTally(db, previous) : [];
+
+const finals = rows.filter((r) => rowState(r.event.status, r.medals[1].length > 0) === 'final');
+const day = festivalDay(sf.startsOn, sf.endsOn, manilaDay(new Date()));
+const days = sf.startsOn && sf.endsOn ? festivalDay(sf.startsOn, sf.endsOn, sf.endsOn)?.of : null;
+const champion = sf.status === 'final' ? (tally.find((r) => r.rank === 1) ?? null) : null;
+const coChampions = tally.filter((r) => r.rank === 1).length > 1;
+const eventsHref = `/sportsfest/${sf.year}/events`;
+const seeAll = rows.length === 1 ? 'See the event' : `See all ${rows.length} events`;
+const medalEvents = `${rows.length} medal ${rows.length === 1 ? 'event' : 'events'}`;
+
+const sizeLine = [
+  countWords(sf.tribus.length, 'tribu'),
+  medalEvents,
+  days ? `${countWords(days, 'day').toLowerCase()}` : null,
+]
+  .filter(Boolean)
+  .join(', ');
+const INTRO = {
+  upcoming: `${sizeLine}. The medal tally starts when the first event ends.`,
+  ongoing: `${sizeLine}. Results go up here as each game ends.`,
+  final: `${sizeLine}. These are the final results.`,
+};
+
+const facts =
+  sf.status === 'upcoming'
+    ? [
+        sf.startsOn && { label: 'Starts', value: formatDayMonth(sf.startsOn) },
+        sf.endsOn && { label: 'Ends', value: formatDayMonth(sf.endsOn) },
+        { label: 'Medal events', value: String(rows.length) },
+      ]
+    : [
+        day && {
+          label: 'Today',
+          value: `Day ${day.day} of ${day.of}, ${formatDayMonth(new Date())}`,
+        },
+        { label: 'Medal events', value: `${finals.length} of ${rows.length} final` },
+      ];
+
+const schedule = scheduleDays(
+  sf.startsOn,
+  sf.endsOn,
+  // One entry per event, carrying its number of categories.
+  [...new Map(rows.map((r) => [r.event.id, r.event])).values()].map((e) => ({
+    name: e.name,
+    startsAt: e.startsAt,
+    categories: rows.filter((r) => r.event.id === e.id).length,
+  })),
+);
+
+const HUB_ROWS = 10;
+const STATE_FILTERS = [
+  { label: 'All', show: null },
+  { label: 'Ongoing', show: 'ongoing' },
+  { label: 'Upcoming', show: 'upcoming' },
+  { label: 'Final', show: 'final' },
+];
+---
+
+<Site
+  title={sf.name}
+  description={INTRO[sf.status]}
+  current="sports"
+>
+  {
+    champion ? (
+      <section class="band champion" aria-labelledby="champion-title">
+        <TribuMark tribu={champion.tribu} size="xl" />
+        <div class="champion-text">
+          <p>
+            {sf.name} {coChampions ? 'co-champion' : 'champion'}
+          </p>
+          <h1 id="champion-title">{champion.tribu.name}</h1>
+          <div class="champion-medals">
+            <MedalCount medal={1} count={champion.gold} size="sm" />
+            <MedalCount medal={2} count={champion.silver} size="sm" />
+            <MedalCount medal={3} count={champion.bronze} size="sm" />
+            <span>
+              {[sf.startsOn && sf.endsOn && formatDayRange(sf.startsOn, sf.endsOn), medalEvents]
+                .filter(Boolean)
+                .join(', ')}
+            </span>
+          </div>
+        </div>
+      </section>
+    ) : (
+      <SportsfestHead title={sf.name} intro={INTRO[sf.status]} facts={facts.filter((f) => !!f)} />
+    )
+  }
+
+  {
+    sf.status === 'upcoming' ? (
+      <>
+        <section class="band framed block" aria-labelledby="tribus-title">
+          <h2 id="tribus-title">The {countWords(sf.tribus.length, 'tribu').toLowerCase()}</h2>
+          {sf.tribus.length === 0 ? (
+            <p class="empty">The tribus taking part show up here once the editors add them.</p>
+          ) : (
+            <ul class="tribus">
+              {sf.tribus.map((t) => {
+                const before = previousTally.find((r) => r.tribu.id === t.id);
+                return (
+                  <li>
+                    <a href={tribuUrl(sf.year, t.slug)}>
+                      <TribuMark tribu={t} size="lg" />
+                      <strong>{t.name}</strong>
+                      {before && previous && (
+                        <span>
+                          {previous.year} finish: {ordinal(before.rank)}
+                        </span>
+                      )}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section class="band framed block" aria-labelledby="schedule-title">
+          <div class="block-head">
+            <h2 id="schedule-title">Schedule</h2>
+            {rows.length > 0 && (
+              <a class="btn btn-secondary" href={eventsHref}>
+                {seeAll}
+              </a>
+            )}
+          </div>
+          {schedule.length === 0 ? (
+            <p class="empty">The schedule goes up here once the dates are set.</p>
+          ) : (
+            <ol class="schedule">
+              {schedule.map((d) => (
+                <li>
+                  <strong>Day {d.day}</strong>
+                  <span class="date">{formatDayMonth(d.date)}</span>
+                  <span class="what">{d.events.length ? d.events.join(', ') : 'To be announced'}</span>
+                  <span class="count">
+                    {d.medalEvents > 0 && `${d.medalEvents} medal ${d.medalEvents === 1 ? 'event' : 'events'}`}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      </>
+    ) : (
+      sf.status === 'final' ? (
+        <TallyTable tally={tally} year={sf.year} title="Final standings">
+          <nav slot="actions" aria-label="More results">
+            <a class="btn btn-secondary" href={eventsHref}>
+              {seeAll}
+            </a>
+            <a class="btn btn-secondary" href="/sportsfest/past">
+              Past Sportsfests
+            </a>
+          </nav>
+        </TallyTable>
+      ) : (
+        <TallyTable tally={tally} year={sf.year} title="Medal tally" />
+      )
+    )
+  }
+
+  {
+    sf.status === 'ongoing' && (
+      <section class="band framed block" aria-labelledby="events-title">
+        <div class="block-head">
+          <h2 id="events-title">All events</h2>
+          <nav class="filters" aria-label="Show events">
+            {STATE_FILTERS.map((f) => (
+              <a
+                class:list={['btn', f.show ? 'btn-secondary' : 'btn-primary']}
+                href={f.show ? `${eventsHref}?show=${f.show}` : eventsHref}
+                aria-current={f.show ? undefined : 'page'}
+              >
+                {f.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+        {rows.length === 0 ? (
+          <p class="empty">Events show up here once the editors add them.</p>
+        ) : (
+          <>
+            <EventsTable rows={rows.slice(0, HUB_ROWS)} tribus={sf.tribus} year={sf.year} />
+            {rows.length > HUB_ROWS && (
+              <a class="btn btn-secondary more" href={eventsHref}>
+                {seeAll}
+              </a>
+            )}
+          </>
+        )}
+      </section>
+    )
+  }
+
+  <Coverage title={sf.status === 'upcoming' ? 'Before Sportsfest' : 'Sportsfest coverage'} stories={coverage} />
+</Site>
+
+<style>
+  h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.04em;
+  }
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-block: 48px;
+  }
+  .block-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+  .filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .filters .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  .more {
+    align-self: flex-start;
+    margin-top: 8px;
+  }
+  .empty {
+    margin: 0;
+    padding-block: 24px;
+    border-top: 1px solid var(--grey-300);
+    color: var(--grey-600);
+  }
+
+  .champion {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 40px;
+    background: var(--sunrise);
+    border-bottom: 1px solid var(--ink);
+  }
+  .champion-text p {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+  }
+  .champion h1 {
+    margin: 0 0 16px;
+    font-size: 72px;
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.06em;
+  }
+  .champion-medals {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .champion-medals span:last-child {
+    margin-left: 8px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .tribus {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .tribus a {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+    padding: 16px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .tribus a:hover {
+    border-color: var(--ink);
+  }
+  .tribus strong {
+    margin-top: 10px;
+    font-size: 20px;
+    line-height: 24px;
+    letter-spacing: -0.03em;
+  }
+  .tribus span {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+
+  .schedule {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .schedule li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
+    padding-block: 14px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .schedule li:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .schedule strong {
+    font-size: 20px;
+    line-height: 24px;
+    letter-spacing: -0.03em;
+  }
+  .schedule .date,
+  .schedule .count {
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+  .schedule .date {
+    align-self: center;
+  }
+  .schedule .what {
+    grid-column: 1 / -1;
+    font-weight: 600;
+  }
+  .schedule .count {
+    grid-column: 1 / -1;
+  }
+
+  @media (min-width: 768px) {
+    .tribus {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1024px) {
+    h2 {
+      font-size: 40px;
+      line-height: 44px;
+    }
+    .block {
+      gap: 24px;
+      padding-block: 96px 64px;
+    }
+    .champion {
+      flex-direction: row;
+      align-items: center;
+      gap: 40px;
+      padding-block: 80px;
+    }
+    .champion h1 {
+      font-size: 140px;
+    }
+    .champion-text p {
+      margin-bottom: 12px;
+    }
+    .tribus {
+      gap: 16px;
+    }
+    .tribus a {
+      padding: 20px;
+    }
+    .tribus strong {
+      margin-top: 12px;
+      font-size: 28px;
+      line-height: 32px;
+    }
+    .schedule li {
+      grid-template-columns: 136px 140px 1fr auto;
+      align-items: center;
+      padding-block: 16px;
+    }
+    .schedule strong {
+      font-size: 24px;
+    }
+    .schedule .what,
+    .schedule .count {
+      grid-column: auto;
+    }
+  }
+</style>

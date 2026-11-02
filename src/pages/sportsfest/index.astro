@@ -1,0 +1,46 @@
+---
+/** The newest Sportsfest's hub, at a URL that stays the same from year to year. */
+import SportsfestHead from '../../components/sportsfest/SportsfestHead.astro';
+import { db } from '../../db/client';
+import { getCurrentSportsfest } from '../../db/queries/navigation';
+import Site from '../../layouts/Site.astro';
+
+const current = await getCurrentSportsfest(db);
+if (current) return Astro.rewrite(`/sportsfest/${current.year}`);
+---
+
+<Site title="Sportsfest" current="sports">
+  <SportsfestHead
+    title="Sportsfest"
+    intro="The medal tally, results and coverage of LNU Sportsfest."
+  />
+  <section class="band framed empty">
+    <h2>No Sportsfest yet</h2>
+    <p>
+      When the editors set up the next Sportsfest, its tribus, schedule and medal tally show up
+      here. Until then, sports stories are in the Sports section.
+    </p>
+    <a class="btn btn-primary" href="/sports">Go to Sports</a>
+  </section>
+</Site>
+
+<style>
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding-block: 48px 72px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 32px;
+    letter-spacing: -0.03em;
+  }
+  p {
+    max-width: 560px;
+    margin: 0 0 8px;
+    color: var(--grey-600);
+  }
+</style>
