@@ -1,0 +1,190 @@
+---
+import type { Navigation } from '../../db/queries/navigation';
+import Torch from '../Torch.astro';
+
+interface Props {
+  nav: Navigation;
+  siteName: string;
+  tagline: string;
+  description: string;
+  facebookUrl: string;
+  hasSportsfest: boolean;
+}
+
+const { nav, siteName, tagline, description, facebookUrl, hasSportsfest } = Astro.props;
+const year = new Date().getFullYear();
+---
+
+<footer class="band framed site-footer">
+  <div class="top">
+    <div class="about">
+      <p class="tagline">{tagline}</p>
+      <p class="description">{description}</p>
+    </div>
+    <nav class="links" aria-label="Footer">
+      <div class="column">
+        <p class="label">Sections</p>
+        {nav.sections.map((l) => <a href={l.href}>{l.label}</a>)}
+        {hasSportsfest && <a href="/sportsfest">Sportsfest</a>}
+      </div>
+      <div class="column">
+        <p class="label">Publication</p>
+        {nav.publication.map((l) => <a href={l.href}>{l.label}</a>)}
+      </div>
+      <div class="column">
+        <p class="label">Write to us</p>
+        {nav.write.map((l) => <a href={l.href}>{l.label}</a>)}
+        <a href={facebookUrl} rel="noopener" target="_blank">Facebook</a>
+      </div>
+    </nav>
+  </div>
+
+  <a class="wordmark" href="/" aria-label={`${siteName} home`}>
+    <Torch class="mark" />
+    <span aria-hidden="true">{siteName}</span>
+  </a>
+
+  <div class="bottom">
+    <p>© {year} {siteName}</p>
+    <p class="place">Leyte Normal University, Tacloban City</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+    padding-block: 64px 69px;
+    padding-inline: 16px;
+  }
+  p {
+    margin: 0;
+  }
+  .about {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .tagline {
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.03em;
+  }
+  .description {
+    font-size: 15px;
+    line-height: 22px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .top {
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px 36px;
+    font-weight: 500;
+  }
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .column a:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .label {
+    font-size: 13px;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  .wordmark {
+    --size: min(184px, 13.4vw);
+    display: flex;
+    align-items: center;
+    gap: calc(var(--size) * 0.15);
+    font-size: var(--size);
+    font-weight: 700;
+    line-height: 0.86;
+    letter-spacing: -0.06em;
+    white-space: nowrap;
+  }
+  .wordmark :global(.mark) {
+    height: calc(var(--size) * 1.2);
+    width: auto;
+    aspect-ratio: 1015 / 1630;
+    flex: none;
+  }
+  .bottom {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 16px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 13px;
+    line-height: 16px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .place {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .site-footer {
+      gap: 72px;
+      padding-block: 104px 81px;
+      padding-inline: var(--gutter);
+    }
+    .top {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .about {
+      gap: 16px;
+    }
+    .tagline {
+      width: 460px;
+      font-size: 32px;
+      line-height: 38px;
+    }
+    .description {
+      font-size: 16px;
+    }
+    .links {
+      flex-wrap: nowrap;
+      gap: 80px;
+    }
+    .column {
+      gap: 12px;
+      font-size: 16px;
+    }
+    .label {
+      font-size: 14px;
+      line-height: 18px;
+    }
+    .wordmark {
+      gap: 28px;
+    }
+    .wordmark :global(.mark) {
+      height: calc(var(--size) * 1.03);
+    }
+    .bottom {
+      padding-top: 20px;
+      font-size: 14px;
+      line-height: 18px;
+    }
+    .place {
+      display: block;
+    }
+  }
+</style>
