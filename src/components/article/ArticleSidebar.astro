@@ -1,0 +1,96 @@
+---
+/** Beside the story: the latest stories and, when Sumat is open, its prompt. */
+import TorchOnYellow from '../../assets/torch-on-yellow.svg';
+import type { StorySummary } from '../../db/queries/stories';
+import StoryCard from '../stories/StoryCard.astro';
+
+interface Props {
+  latest: StorySummary[];
+  prompt: string | null;
+}
+
+const { latest, prompt } = Astro.props;
+---
+
+<aside class="sidebar">
+  {
+    latest.length > 0 && (
+      <section aria-labelledby="sidebar-latest">
+        <h2 id="sidebar-latest">Latest</h2>
+        <div class="list">
+          {latest.map((s) => (
+            <StoryCard story={s} variant="compact" />
+          ))}
+        </div>
+      </section>
+    )
+  }
+  {
+    prompt && (
+      <section class="sumat" aria-label="Sumat">
+        <p class="brand">
+          <TorchOnYellow class="mark" />
+          <span>Sumat</span>
+        </p>
+        <p class="kicker">This week’s prompt</p>
+        <p class="prompt">{prompt}</p>
+        <a class="btn btn-primary" href="/sumat">Answer the prompt</a>
+      </section>
+    )
+  }
+</aside>
+
+<style>
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  h2 {
+    margin: 0 0 16px;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.03em;
+  }
+  .list > :global(*) {
+    padding-block: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .sumat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 28px;
+    border: 1px solid var(--ink);
+    background: var(--sunrise);
+  }
+  .sumat p {
+    margin: 0;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 24px;
+    letter-spacing: -0.03em;
+  }
+  .brand :global(.mark) {
+    width: 17.52px;
+    height: 28px;
+  }
+  .kicker {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 18px;
+  }
+  .prompt {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.04em;
+  }
+</style>

@@ -1,0 +1,129 @@
+---
+/** The credits row: who wrote, shot and drew it, when, and how long it takes to read. */
+import type { Credit } from '../../db/queries/story-page';
+import { formatDate, isoDate } from '../../lib/format';
+import { mediaUrl } from '../../lib/urls';
+
+interface Props {
+  credits: Credit[];
+  publishedAt: Date | null;
+  minutes: number;
+  dark?: boolean;
+  /** Opinion pieces lead with "By" and can show the writer's photo. */
+  opinion?: boolean;
+  writerPhoto?: boolean;
+}
+
+const {
+  credits,
+  publishedAt,
+  minutes,
+  dark = false,
+  opinion = false,
+  writerPhoto = false,
+} = Astro.props;
+const ROLE_LABEL = {
+  writer: opinion ? 'By' : 'Words',
+  photographer: 'Photos',
+  artist: 'Art and layout',
+  editor: 'Edited by',
+};
+const groups = (['writer', 'photographer', 'artist', 'editor'] as const)
+  .map((role) => ({ role, people: credits.filter((c) => c.role === role) }))
+  .filter((g) => g.people.length);
+const photo = writerPhoto ? credits.find((c) => c.role === 'writer' && c.photoKey)?.photoKey : null;
+---
+
+<dl class:list={['credits', dark && 'dark']}>
+  {
+    groups.map((g) => (
+      <div class:list={['item', g.role === 'writer' && photo && 'with-photo']}>
+        {g.role === 'writer' && photo && <img class="writer-photo" src={mediaUrl(photo)} alt="" />}
+        <div>
+          <dt>{ROLE_LABEL[g.role]}</dt>
+          <dd>
+            {g.people.map((p, i) => (
+              <>
+                {i > 0 && (i === g.people.length - 1 ? ' and ' : ', ')}
+                <a href={`/people/${p.slug}`}>{p.name}</a>
+              </>
+            ))}
+          </dd>
+        </div>
+      </div>
+    ))
+  }
+  {
+    opinion && !groups.some((g) => g.role === 'writer') && (
+      <div class="item">
+        <div>
+          <dt>By</dt>
+          <dd>The editorial board</dd>
+        </div>
+      </div>
+    )
+  }
+  <div class="item">
+    <div>
+      <dt>Published</dt>
+      <dd><time datetime={isoDate(publishedAt)}>{formatDate(publishedAt)}</time></dd>
+    </div>
+  </div>
+  <div class="item">
+    <div>
+      <dt>Reading time</dt>
+      <dd>{minutes} {minutes === 1 ? 'minute' : 'minutes'}</dd>
+    </div>
+  </div>
+</dl>
+
+<style>
+  .credits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 48px;
+    margin: 0;
+    padding-top: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  dt {
+    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 16px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  dd {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+  dd a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .writer-photo {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+  }
+  .dark {
+    border-top-color: rgb(255 255 255 / 0.24);
+  }
+  .dark dt {
+    color: var(--grey-300);
+  }
+  .dark dd {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--white);
+  }
+</style>

@@ -1,0 +1,80 @@
+---
+import type { StorySummary } from '../../db/queries/stories';
+import StoryCard from '../stories/StoryCard.astro';
+
+interface Props {
+  title: string;
+  stories: StorySummary[];
+  allHref: string;
+  allLabel: string;
+}
+
+const { title, stories, allHref, allLabel } = Astro.props;
+---
+
+{
+  stories.length > 0 && (
+    <section class="band framed next" aria-labelledby="read-next">
+      <div class="head">
+        <h2 id="read-next">{title}</h2>
+        <a class="btn btn-secondary" href={allHref}>
+          {allLabel}
+        </a>
+      </div>
+      <div class="cards">
+        {stories.map((s) => (
+          <StoryCard story={s} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+<style>
+  .next {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-block: 64px 72px;
+  }
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 36px;
+    letter-spacing: -0.04em;
+  }
+  .cards {
+    display: grid;
+    column-gap: 24px;
+  }
+  .cards > :global(*) {
+    padding-block: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+  @media (min-width: 768px) {
+    .cards {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .cards > :global(*) {
+      padding-block: 0;
+      border-top: 0;
+    }
+  }
+  @media (min-width: 1024px) {
+    .next {
+      gap: 36px;
+      padding-block: 96px 128px;
+    }
+    h2 {
+      font-size: 48px;
+      line-height: 52px;
+    }
+  }
+</style>

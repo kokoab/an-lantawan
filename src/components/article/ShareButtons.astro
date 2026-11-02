@@ -1,0 +1,91 @@
+---
+/** Messenger, Facebook and Copy link. Copy link shows a short confirmation. */
+interface Props {
+  url: string;
+  dark?: boolean;
+}
+
+const { url, dark = false } = Astro.props;
+const encoded = encodeURIComponent(url);
+---
+
+<div class:list={['share', dark && 'dark']}>
+  <span class="label">Share</span>
+  <a class="chip" href={`fb-messenger://share/?link=${encoded}`}>Messenger</a>
+  <a class="chip" href={`https://www.facebook.com/sharer/sharer.php?u=${encoded}`} target="_blank" rel="noopener">
+    Facebook
+  </a>
+  <button class="chip" type="button" data-copy-link={url}>Copy link</button>
+</div>
+<p class="toast" role="status" aria-live="polite" hidden data-copy-toast>Link copied. Paste it anywhere.</p>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-link]')) {
+    button.addEventListener('click', async () => {
+      const toast = document.querySelector<HTMLElement>('[data-copy-toast]');
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyLink ?? location.href);
+        if (toast) {
+          toast.hidden = false;
+          setTimeout(() => {
+            toast.hidden = true;
+          }, 2500);
+        }
+      } catch {
+        // Clipboard blocked: select-and-copy fallback isn't possible from a button, so do nothing.
+      }
+    });
+  }
+</script>
+
+<style>
+  .share {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .label {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  .chip {
+    padding: 8px 12px;
+    border: 1px solid var(--grey-300);
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+  }
+  .chip:hover {
+    border-color: var(--ink);
+  }
+  .dark .label {
+    color: var(--grey-300);
+  }
+  .dark .chip {
+    border-color: rgb(255 255 255 / 0.4);
+    color: var(--white);
+  }
+  .dark .chip:hover {
+    border-color: var(--white);
+  }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 60;
+    transform: translateX(-50%);
+    margin: 0;
+    padding: 11px 16px;
+    background: var(--ink);
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+</style>
