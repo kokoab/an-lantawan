@@ -1,0 +1,101 @@
+---
+import { db } from '../../db/client';
+import { getIssue } from '../../db/queries/issues';
+import Site from '../../layouts/Site.astro';
+import { formatBytes, formatMonth } from '../../lib/format';
+import { mediaUrl } from '../../lib/urls';
+
+const issue = await getIssue(db, Astro.params.slug ?? '');
+if (!issue) return Astro.rewrite('/404');
+const pdf = mediaUrl(issue.pdfKey);
+const kindLabel = issue.kind === 'newsletter' ? 'Newsletter' : 'Special publication';
+const { title, description } = issue;
+const released = `${kindLabel}, ${formatMonth(issue.publishedOn)}`;
+const file = `PDF, ${formatBytes(issue.pdfBytes)}`;
+---
+
+<Site title={title} description={description ?? released}>
+  <section class="band framed head">
+    <a class="back" href="/print">← All print issues</a>
+    <h1>{title}</h1>
+    <p class="meta">{released}. {file}</p>
+    {description && <p class="description">{description}</p>}
+    <div class="actions">
+      <a class="btn btn-primary" href={pdf} target="_blank" rel="noopener">Open the PDF</a>
+      <a class="btn btn-secondary" href={pdf} download>Download PDF</a>
+    </div>
+  </section>
+
+  <section class="band reader" aria-label="Issue">
+    <iframe src={pdf} title={`${title}, PDF`} loading="lazy"></iframe>
+    <p class="fallback">If the issue doesn’t show here, use Open the PDF above.</p>
+  </section>
+</Site>
+
+<style>
+  h1,
+  p {
+    margin: 0;
+  }
+  .head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding-block: 40px 48px;
+  }
+  .back {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .back:hover {
+    text-decoration: underline;
+  }
+  h1 {
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.05em;
+  }
+  .meta {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--grey-600);
+  }
+  .description {
+    max-width: 720px;
+    font-size: 17px;
+    line-height: 26px;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 6px;
+  }
+  .reader {
+    padding-block: 0 72px;
+  }
+  iframe {
+    display: block;
+    width: 100%;
+    height: 80vh;
+    min-height: 520px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+  }
+  .fallback {
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--grey-600);
+  }
+  @media (min-width: 1024px) {
+    .head {
+      padding-block: 64px 56px;
+    }
+    h1 {
+      font-size: 72px;
+      line-height: 74px;
+    }
+  }
+</style>
