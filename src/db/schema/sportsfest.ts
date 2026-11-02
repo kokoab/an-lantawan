@@ -5,6 +5,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -88,8 +89,9 @@ export const categories = sqliteTable('categories', {
 });
 
 /**
- * Medals. Place is not unique within a category so ties (two bronzes) are allowed,
- * but a tribu can only hold one medal per category.
+ * Where each tribu finished in a category. Places 1 to 3 are the medals; later places are
+ * kept for the full results. Place is not unique, so ties (two bronzes) are allowed, but a
+ * tribu finishes only once per category.
  */
 export const placements = sqliteTable(
   'placements',
@@ -102,12 +104,12 @@ export const placements = sqliteTable(
       .notNull()
       .references(() => tribus.id, { onDelete: 'restrict' }),
     place: integer('place').notNull(),
-    /** Time, distance or score shown beside the medal, e.g. "12.41s". */
+    /** Time, distance or score shown beside the place, e.g. "12.41 seconds". */
     mark: text('mark'),
   },
   (t) => [
     uniqueIndex('placements_tribu').on(t.categoryId, t.tribuId),
-    check('placements_place', sql`${t.place} between 1 and 3`),
+    check('placements_place', sql`${t.place} >= 1`),
   ],
 );
 
@@ -124,6 +126,10 @@ export const stages = sqliteTable(
     kind: text('kind', { enum: STAGE_KINDS }).notNull(),
     name: text('name').notNull(),
     sort: integer('sort').notNull().default(0),
+    /** Round-robin points. Chess, for one, gives 2 for a win and 1 for a draw. */
+    pointsWin: real('points_win').notNull().default(3),
+    pointsDraw: real('points_draw').notNull().default(1),
+    pointsLoss: real('points_loss').notNull().default(0),
   },
   (t) => [oneOf('stages_kind', t.kind, STAGE_KINDS)],
 );
@@ -168,8 +174,9 @@ export const matches = sqliteTable(
     position: integer('position').notNull(),
     homeTribuId: integer('home_tribu_id').references(() => tribus.id, { onDelete: 'restrict' }),
     awayTribuId: integer('away_tribu_id').references(() => tribus.id, { onDelete: 'restrict' }),
-    homeScore: integer('home_score'),
-    awayScore: integer('away_score'),
+    /** Real numbers, so chess can score half points (2½–1½). */
+    homeScore: real('home_score'),
+    awayScore: real('away_score'),
     winnerTribuId: integer('winner_tribu_id').references(() => tribus.id, { onDelete: 'restrict' }),
     status: text('status', { enum: MATCH_STATUSES }).notNull().default('scheduled'),
     startsAt: integer('starts_at', { mode: 'timestamp' }),
