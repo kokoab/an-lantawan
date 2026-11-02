@@ -1,0 +1,29 @@
+---
+import { safeNextPath } from '../../core/auth/google';
+import AdminAuth from '../../layouts/AdminAuth.astro';
+
+if (Astro.locals.editor)
+  return Astro.redirect(safeNextPath(Astro.url.searchParams.get('next')), 303);
+
+// Fixed messages only: nothing from the URL is shown on the page.
+const ERRORS: Record<string, string> = {
+  cancelled: 'Sign-in was cancelled. Try again when you are ready.',
+  expired: 'That sign-in took too long or was started in another tab. Try again.',
+  google: "Google didn't confirm the sign-in. Try again.",
+  busy: 'Too many sign-in attempts. Wait a minute, then try again.',
+  not_configured:
+    "Google sign-in isn't set up yet. Ask the site's developer to add the Google client ID and secret.",
+};
+const error = ERRORS[Astro.url.searchParams.get('error') ?? ''];
+const signedOut = Astro.url.searchParams.has('signedout');
+const next = safeNextPath(Astro.url.searchParams.get('next'));
+const href = `/auth/google?next=${encodeURIComponent(next)}`;
+---
+
+<AdminAuth title="Sign in">
+  <h1>Sign in</h1>
+  {signedOut && !error && <p>You're signed out.</p>}
+  {error && <p class="error" role="alert">{error}</p>}
+  <a class="button" href={href}>Sign in with Google</a>
+  <p>Only editor accounts on the admin list can sign in.</p>
+</AdminAuth>

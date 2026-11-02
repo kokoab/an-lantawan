@@ -1,0 +1,14 @@
+---
+import AdminAuth from '../../layouts/AdminAuth.astro';
+
+// The middleware guarantees an editor here.
+const editor = Astro.locals.editor as NonNullable<App.Locals['editor']>;
+---
+
+<AdminAuth title="Admin">
+  <h1>Hi, {editor.name}</h1>
+  <p>Signed in as {editor.email}. The full admin is being built.</p>
+  <form method="post" action="/auth/signout">
+    <button class="button secondary" type="submit">Sign out</button>
+  </form>
+</AdminAuth>

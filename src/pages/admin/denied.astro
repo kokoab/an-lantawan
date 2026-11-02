@@ -1,0 +1,12 @@
+---
+import AdminAuth from '../../layouts/AdminAuth.astro';
+---
+
+<AdminAuth title="No access">
+  <h1>This account isn't on the admin list</h1>
+  <p>
+    Sign in with an editor account, or ask an editor who already has access to add your email in
+    the admin.
+  </p>
+  <a class="button secondary" href="/admin/signin">Use a different account</a>
+</AdminAuth>

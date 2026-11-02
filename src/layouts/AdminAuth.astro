@@ -1,0 +1,124 @@
+---
+/** Small centred card used by the admin sign-in screens. */
+import Torch from '../components/Torch.astro';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title} · An Lantawan admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main>
+      <div class="brand"><Torch /><span>An Lantawan admin</span></div>
+      <section class="card">
+        <slot />
+      </section>
+    </main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --white: #ffffff;
+    --ink: #0a0a0a;
+    --grey-100: #f3f3f1;
+    --grey-300: #d6d6d3;
+    --grey-600: #6b6b68;
+    --sunrise: linear-gradient(180deg, #ffe400 0%, #ffc700 100%);
+    --error: #d92d20;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    min-height: 100svh;
+    display: grid;
+    place-items: center;
+    background: var(--grey-100);
+    color: var(--ink);
+    font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    width: 100%;
+    max-width: 400px;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+  }
+  .brand svg {
+    width: 18px;
+    height: 29px;
+  }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--grey-300);
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--grey-600);
+  }
+  .button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 20px;
+    font: inherit;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid var(--ink);
+    background: var(--sunrise);
+    color: var(--ink);
+  }
+  .button.secondary {
+    background: var(--white);
+    border-color: var(--grey-300);
+  }
+  .button:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .error {
+    color: var(--error);
+  }
+</style>
