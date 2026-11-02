@@ -382,12 +382,12 @@ fieldset {
   color: var(--grey-600);
   white-space: nowrap;
 }
+.table tbody th {
+  font-weight: 600;
+}
 .table tbody tr:last-child td,
 .table tbody tr:last-child th {
   border-bottom: 0;
-}
-.table tbody th {
-  font-weight: 600;
 }
 .table a:not(.btn):hover {
   text-decoration: underline;
