@@ -1,0 +1,28 @@
+---
+import type { StorySummary } from '../../db/queries/stories';
+import { focalClasses, mediaUrl } from '../../lib/urls';
+
+interface Props {
+  cover: StorySummary['cover'];
+  class?: string;
+  /** The first photo on a page loads right away; the rest load as they scroll in. */
+  eager?: boolean;
+}
+
+const { cover, class: className, eager = false } = Astro.props;
+---
+
+<div class:list={['photo', className]}>
+  {
+    cover && (
+      <img
+        src={mediaUrl(cover.key)}
+        alt={cover.alt ?? ''}
+        loading={eager ? 'eager' : 'lazy'}
+        decoding="async"
+        fetchpriority={eager ? 'high' : undefined}
+        class={focalClasses(cover)}
+      />
+    )
+  }
+</div>
