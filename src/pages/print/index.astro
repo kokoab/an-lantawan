@@ -3,8 +3,10 @@ import IssueCover from '../../components/print/IssueCover.astro';
 import PageHead from '../../components/site/PageHead.astro';
 import Pagination from '../../components/stories/Pagination.astro';
 import { parsePage } from '../../core/paging';
+import { settingDefaults } from '../../core/settings';
 import { db } from '../../db/client';
 import { type IssueKind, listIssues } from '../../db/queries/issues';
+import { getSettings } from '../../db/queries/settings';
 import Site from '../../layouts/Site.astro';
 import { formatBytes, formatMonth } from '../../lib/format';
 import { mediaUrl } from '../../lib/urls';
@@ -26,6 +28,7 @@ const result = await listIssues(db, {
   offset: page === 1 ? 0 : 1 + PER_PAGE * (page - 1),
   limit: page === 1 ? 1 + PER_PAGE : PER_PAGE,
 });
+const { 'page.print.intro': intro } = await getSettings(db, settingDefaults('page.print.intro'));
 const latest = page === 1 ? result.issues[0] : null;
 const earlier = page === 1 ? result.issues.slice(1) : result.issues;
 const pages = Math.max(1, Math.ceil(Math.max(0, result.total - 1) / PER_PAGE));
@@ -41,10 +44,10 @@ const href = (param: string | null, p = 1) => {
 const kindLabel = (k: IssueKind) => (k === 'newsletter' ? 'Newsletter' : 'Special publication');
 ---
 
-<Site title="Print issues" description="An Lantawan newsletters and special publications, as they were printed.">
+<Site title="Print issues" description={intro}>
   <PageHead
     title="Print issues"
-    intro="Newsletters and special publications, as they were printed. Open any issue to read it as a PDF."
+    intro={intro}
     filters={KINDS.map((k) => ({ label: k.label, href: href(k.param), current: k === kind }))}
     filtersLabel="Show"
   />

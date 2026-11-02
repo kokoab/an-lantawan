@@ -1,19 +1,22 @@
 ---
 /** The newest Sportsfest's hub, at a URL that stays the same from year to year. */
 import SportsfestHead from '../../components/sportsfest/SportsfestHead.astro';
+import { settingDefaults } from '../../core/settings';
 import { db } from '../../db/client';
 import { getCurrentSportsfest } from '../../db/queries/navigation';
+import { getSettings } from '../../db/queries/settings';
 import Site from '../../layouts/Site.astro';
 
 const current = await getCurrentSportsfest(db);
 if (current) return Astro.rewrite(`/sportsfest/${current.year}`);
+const { 'page.sportsfest.intro': intro } = await getSettings(
+  db,
+  settingDefaults('page.sportsfest.intro'),
+);
 ---
 
 <Site title="Sportsfest" current="sports">
-  <SportsfestHead
-    title="Sportsfest"
-    intro="The medal tally, results and coverage of LNU Sportsfest."
-  />
+  <SportsfestHead title="Sportsfest" intro={intro} />
   <section class="band framed empty">
     <h2>No Sportsfest yet</h2>
     <p>

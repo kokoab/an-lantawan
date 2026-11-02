@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
+import { settingDefaults } from '../../core/settings';
 import { checkSubmission, MAX_PER_MINUTE, type SubmissionError } from '../../core/sumat/submission';
 import { db } from '../../db/client';
 import { getSettings } from '../../db/queries/settings';
@@ -30,7 +31,10 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const input = await request.json().catch(() => ({}));
-    const { 'sumat.max_length': maxLength } = await getSettings(db, { 'sumat.max_length': 500 });
+    const { 'sumat.max_length': maxLength } = await getSettings(
+      db,
+      settingDefaults('sumat.max_length'),
+    );
     const checked = checkSubmission(input, maxLength);
     if (checked.kind === 'discard') return reply({ ok: true });
     if (checked.kind === 'reject') return reply({ ok: false, error: checked.error });

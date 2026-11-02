@@ -2,8 +2,10 @@
 import PageHead from '../components/site/PageHead.astro';
 import Pagination from '../components/stories/Pagination.astro';
 import { parsePage, STORIES_PER_PAGE } from '../core/paging';
+import { settingDefaults } from '../core/settings';
 import { db } from '../db/client';
 import { type LetterFilter, listLetters } from '../db/queries/letters';
+import { getSettings } from '../db/queries/settings';
 import { currentPrompt } from '../db/queries/sumat';
 import Site from '../layouts/Site.astro';
 import { formatDate, isoDate } from '../lib/format';
@@ -18,9 +20,10 @@ const filter = FILTERS.find((f) => f.value === requested)?.value ?? 'all';
 const page = parsePage(Astro.url.searchParams.get('page'));
 if (!page) return Astro.rewrite('/404');
 
-const [result, prompt] = await Promise.all([
+const [result, prompt, copy] = await Promise.all([
   listLetters(db, { filter, page, perPage: STORIES_PER_PAGE }),
   currentPrompt(db),
+  getSettings(db, settingDefaults('page.letters.intro', 'sumat.home_note')),
 ]);
 if (page > result.pages) return Astro.rewrite('/404');
 
@@ -38,10 +41,10 @@ const dayMonth = new Intl.DateTimeFormat('en-US', {
 });
 ---
 
-<Site title="Published letters" description="Letters sent through Sumat that the editorial team chose to publish.">
+<Site title="Published letters" description={copy['page.letters.intro']}>
   <PageHead
     title="Published letters"
-    intro="Letters sent through Sumat that the editorial team chose to publish. Anonymous letters stay anonymous."
+    intro={copy['page.letters.intro']}
     filters={FILTERS.map((f) => ({ label: f.label, href: href(f.value), current: f.value === filter }))}
     filtersLabel="Show"
   />

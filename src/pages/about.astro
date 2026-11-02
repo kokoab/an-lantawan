@@ -1,25 +1,26 @@
 ---
+import { settingDefaults } from '../core/settings';
 import { db } from '../db/client';
 import { getEditorialBoard } from '../db/queries/people';
 import { getSettings } from '../db/queries/settings';
 import Site from '../layouts/Site.astro';
 import { mediaUrl } from '../lib/urls';
 
-type Row = { title: string; text: string };
-type ContactRow = { label: string; text: string };
-
 const [s, board] = await Promise.all([
-  getSettings(db, {
-    'about.headline': '',
-    'about.intro': '',
-    'about.how_we_work': [] as Row[],
-    'about.contact': [] as ContactRow[],
-    'about.join_title': 'Join the staff',
-    'about.join_text': '',
-    'about.join_note': '',
-    'site.tagline': 'Liberating the critical and creative mind.',
-    'site.facebook_url': 'https://www.facebook.com/AnLantawanLNU',
-  }),
+  getSettings(
+    db,
+    settingDefaults(
+      'about.headline',
+      'about.intro',
+      'about.how_we_work',
+      'about.contact',
+      'about.join_title',
+      'about.join_text',
+      'about.join_note',
+      'site.tagline',
+      'site.facebook_url',
+    ),
+  ),
   getEditorialBoard(db),
 ]);
 // "2025–2026" with non-breaking joins so the years never split across lines.

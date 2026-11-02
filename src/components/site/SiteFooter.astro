@@ -8,10 +8,11 @@ interface Props {
   tagline: string;
   description: string;
   facebookUrl: string;
+  place: string;
   hasSportsfest: boolean;
 }
 
-const { nav, siteName, tagline, description, facebookUrl, hasSportsfest } = Astro.props;
+const { nav, siteName, tagline, description, facebookUrl, place, hasSportsfest } = Astro.props;
 const year = new Date().getFullYear();
 ---
 
@@ -46,7 +47,7 @@ const year = new Date().getFullYear();
 
   <div class="bottom">
     <p>© {year} {siteName}</p>
-    <p class="place">Leyte Normal University, Tacloban City</p>
+    <p class="place">{place}</p>
   </div>
 </footer>
 

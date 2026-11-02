@@ -7,9 +7,11 @@ import { storyUrl } from '../../lib/urls';
 interface Props {
   prompt: string;
   letters: StorySummary[];
+  tagline: string;
+  note: string;
 }
 
-const { prompt, letters } = Astro.props;
+const { prompt, letters, tagline, note } = Astro.props;
 ---
 
 <div class="wrap">
@@ -18,7 +20,7 @@ const { prompt, letters } = Astro.props;
       <p class="brand">
         <TorchOnYellow class="mark" />
         <span class="name">Sumat</span>
-        <span class="tagline">Write to the editorial team</span>
+        <span class="tagline">{tagline}</span>
       </p>
       <div class="question">
         <p class="kicker">This week’s prompt</p>
@@ -26,7 +28,7 @@ const { prompt, letters } = Astro.props;
       </div>
       <div class="action">
         <a class="btn btn-primary" href="/sumat">Answer the prompt</a>
-        <p>Anonymous unless you sign it</p>
+        <p>{note}</p>
       </div>
     </div>
 

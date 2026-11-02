@@ -3,22 +3,34 @@ import HomeHero from '../components/home/HomeHero.astro';
 import HomeMoreNews from '../components/home/HomeMoreNews.astro';
 import HomeOpinion from '../components/home/HomeOpinion.astro';
 import HomeSumat from '../components/home/HomeSumat.astro';
+import { settingDefaults } from '../core/settings';
 import { db } from '../db/client';
 import { getHomepage } from '../db/queries/home';
+import { getSettings } from '../db/queries/settings';
 import { getSection } from '../db/queries/stories';
 import { currentPrompt } from '../db/queries/sumat';
 import Site from '../layouts/Site.astro';
 
-const [home, prompt, opinionSection] = await Promise.all([
+const [home, prompt, opinionSection, copy] = await Promise.all([
   getHomepage(db),
   currentPrompt(db),
   getSection(db, 'opinion'),
+  getSettings(db, settingDefaults('sumat.home_tagline', 'sumat.home_note')),
 ]);
 ---
 
 <Site title="An Lantawan">
   {home.lead && <HomeHero lead={home.lead} minutes={home.leadMinutes} latest={home.latest} />}
-  {prompt && <HomeSumat prompt={prompt.text} letters={home.letters} />}
+  {
+    prompt && (
+      <HomeSumat
+        prompt={prompt.text}
+        letters={home.letters}
+        tagline={copy['sumat.home_tagline']}
+        note={copy['sumat.home_note']}
+      />
+    )
+  }
   {home.more.length > 0 && <HomeMoreNews stories={home.more} />}
   {home.opinion.length > 0 && <HomeOpinion intro={opinionSection?.description ?? null} pieces={home.opinion} />}
   {

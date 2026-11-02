@@ -1,7 +1,9 @@
 ---
 import StoryList from '../components/stories/StoryList.astro';
 import { parsePage } from '../core/paging';
+import { settingDefaults } from '../core/settings';
 import { db } from '../db/client';
+import { getSettings } from '../db/queries/settings';
 import Site from '../layouts/Site.astro';
 import { loadStoryList } from '../lib/story-list';
 
@@ -12,7 +14,10 @@ const list = await loadStoryList(db, { current: null, sectionIds: [], kind: 'exp
 if (page > list.pages) return Astro.rewrite('/404');
 const filters = list.filters.map((f) => ({ ...f, current: false }));
 const pageHref = (p: number) => (p === 1 ? '/explainers' : `/explainers?page=${p}`);
-const intro = 'What a law, a policy or a controversy means for LNU students, explained.';
+const { 'page.explainers.intro': intro } = await getSettings(
+  db,
+  settingDefaults('page.explainers.intro'),
+);
 ---
 
 <Site title={page === 1 ? 'Explainers' : `Explainers, page ${page}`} description={intro}>

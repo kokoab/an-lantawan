@@ -3,7 +3,9 @@ import MedalCount from '../../components/sportsfest/MedalCount.astro';
 import SportsfestHead from '../../components/sportsfest/SportsfestHead.astro';
 import StatePill from '../../components/sportsfest/StatePill.astro';
 import TribuMark from '../../components/sportsfest/TribuMark.astro';
+import { settingDefaults } from '../../core/settings';
 import { db } from '../../db/client';
+import { getSettings } from '../../db/queries/settings';
 import { getSportsfest, getTally, listSportsfests } from '../../db/queries/sportsfest';
 import Site from '../../layouts/Site.astro';
 import { formatDayMonth } from '../../lib/format';
@@ -18,13 +20,17 @@ const rows = await Promise.all(
     return { ...y, top, shared: tally.filter((r) => r.rank === 1).length > 1 };
   }),
 );
+const { 'page.sportsfest_past.intro': intro } = await getSettings(
+  db,
+  settingDefaults('page.sportsfest_past.intro'),
+);
 const STATE = { upcoming: 'upcoming', ongoing: 'ongoing', final: 'final' } as const;
 ---
 
-<Site title="Past Sportsfests" description="Every Sportsfest An Lantawan has covered." current="sports">
+<Site title="Past Sportsfests" description={intro} current="sports">
   <SportsfestHead
     title="Sportsfest"
-    intro="Every Sportsfest we have covered: the champion, the medal tally and the full results."
+    intro={intro}
   />
 
   <section class="band framed years" aria-label="Sportsfests by year">

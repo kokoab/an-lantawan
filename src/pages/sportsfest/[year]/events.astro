@@ -5,8 +5,10 @@ import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro'
 import Pagination from '../../../components/stories/Pagination.astro';
 import { parsePage } from '../../../core/paging';
 import { MAX_QUERY_LENGTH } from '../../../core/search/query';
+import { settingDefaults } from '../../../core/settings';
 import { filterRows, manilaDay, type RowState, rowState } from '../../../core/sportsfest/display';
 import { db } from '../../../db/client';
+import { getSettings } from '../../../db/queries/settings';
 import { listEventRows } from '../../../db/queries/sportsfest';
 import Site from '../../../layouts/Site.astro';
 import { formatDayMonth } from '../../../lib/format';
@@ -28,6 +30,10 @@ const q = (params.get('q') ?? '').trim().slice(0, MAX_QUERY_LENGTH);
 const state = STATES.find((s) => s.value === params.get('show'))?.value ?? null;
 const tribu = sf.tribus.find((t) => t.slug === params.get('tribu')) ?? null;
 
+const { 'page.sportsfest_events.intro': intro } = await getSettings(
+  db,
+  settingDefaults('page.sportsfest_events.intro'),
+);
 const all = (await listEventRows(db, sf.id)).map((r) => ({
   ...r,
   event: r.event,
@@ -71,7 +77,7 @@ const href = (change: { show?: RowState | null; page?: number }) => {
 >
   <SportsfestHead
     title="All events"
-    intro="Every medal event, its schedule and its winners. Search by sport, or filter by tribu or day."
+    intro={intro}
     back={{ label: sf.name, href: `/sportsfest/${sf.year}` }}
   >
     <form class="search" action={base} method="get" role="search">
