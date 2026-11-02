@@ -1,0 +1,9 @@
+-- About page copy. Editable in the admin under Site settings → Pages → About.
+INSERT INTO settings (key, value) VALUES
+  ('about.headline', '"We report on Leyte Normal University for the people who study and work in it."'),
+  ('about.intro', '"An Lantawan is the official student publication of Leyte Normal University in Tacloban City. Every story is reported, edited, photographed and laid out by students."'),
+  ('about.how_we_work', '[{"title": "What we cover", "text": "News, features and explainers about the university: its offices, its student council, its classes and the people in them. When something off campus affects LNU students, we cover that too."}, {"title": "Opinion is kept separate", "text": "Editorials, columns and cartoons carry an Opinion label and a black header. They are the views of the editorial board or the writer, never our news reporting."}, {"title": "Corrections", "text": "When we get something wrong, we fix it and say so at the end of the story, with the date of the change. Tell us about an error through Sumat."}, {"title": "Letters through Sumat", "text": "Students can write to the editorial team anonymously or with their name. Letters are read only by the editorial team, and some are published."}]'),
+  ('about.contact', '[{"label": "Tips and letters", "text": "Send them through Sumat, anonymously or with your name."}, {"label": "Messages", "text": "Message the An Lantawan page on Facebook."}, {"label": "Office", "text": "Leyte Normal University, Paterno Street, Tacloban City"}]'),
+  ('about.join_title', '"Join the staff"'),
+  ('about.join_text', '"We recruit at the start of every school year: writers, photographers, illustrators, layout artists and videographers. You don’t need experience, only the willingness to learn and to be edited."'),
+  ('about.join_note', '"The call for applicants goes up on our Facebook page."');
