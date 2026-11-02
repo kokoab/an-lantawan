@@ -1,0 +1,90 @@
+---
+/** Renders story blocks. Only these elements are ever produced; stored text is always escaped. */
+import type { Block, Embed } from '../../core/content/doc';
+import { mediaUrl } from '../../lib/urls';
+import Inlines from './Inlines.astro';
+
+interface Props {
+  blocks: Block[];
+}
+
+const { blocks } = Astro.props;
+
+/** YouTube's privacy-friendly domain, and Drive's preview player. */
+function embedSrc(e: Embed): string | null {
+  const yt = e.attrs.url.match(/youtube(?:-nocookie)?\.com\/embed\/([\w-]+)/);
+  if (e.attrs.provider === 'youtube' && yt)
+    return `https://www.youtube-nocookie.com/embed/${yt[1]}`;
+  const drive = e.attrs.url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+  if (e.attrs.provider === 'drive' && drive)
+    return `https://drive.google.com/file/d/${drive[1]}/preview`;
+  return null;
+}
+---
+
+{
+  blocks.map((b) => {
+    switch (b.type) {
+      case 'paragraph':
+        return (
+          <p>
+            <Inlines content={b.content} />
+          </p>
+        );
+      case 'heading':
+        return b.attrs.level === 2 ? (
+          <h2>
+            <Inlines content={b.content} />
+          </h2>
+        ) : b.attrs.level === 3 ? (
+          <h3>
+            <Inlines content={b.content} />
+          </h3>
+        ) : (
+          <h4>
+            <Inlines content={b.content} />
+          </h4>
+        );
+      case 'blockquote':
+        return (
+          <blockquote>
+            <Astro.self blocks={b.content} />
+          </blockquote>
+        );
+      case 'bulletList':
+      case 'orderedList': {
+        const items = b.content.map((li) => (
+          <li>
+            <Astro.self blocks={li.content} />
+          </li>
+        ));
+        return b.type === 'bulletList' ? <ul>{items}</ul> : <ol>{items}</ol>;
+      }
+      case 'image':
+        return b.attrs.key ? (
+          <figure>
+            <img src={mediaUrl(b.attrs.key)} alt={b.attrs.alt} loading="lazy" decoding="async" />
+            {b.attrs.caption && <figcaption>{b.attrs.caption}</figcaption>}
+          </figure>
+        ) : null;
+      case 'embed': {
+        const src = embedSrc(b);
+        return src ? (
+          <div class="embed">
+            <iframe
+              src={src}
+              title={b.attrs.provider === 'youtube' ? 'YouTube video' : 'Google Drive file'}
+              loading="lazy"
+              allow="encrypted-media; picture-in-picture; fullscreen"
+              referrerpolicy="strict-origin-when-cross-origin"
+            />
+          </div>
+        ) : null;
+      }
+      case 'horizontalRule':
+        return <hr />;
+      default:
+        return null;
+    }
+  })
+}

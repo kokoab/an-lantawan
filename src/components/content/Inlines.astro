@@ -1,0 +1,12 @@
+---
+import type { Inline } from '../../core/content/doc';
+import Marked from './Marked.astro';
+
+interface Props {
+  content: Inline[] | undefined;
+}
+
+const { content = [] } = Astro.props;
+---
+
+{content.map((n) => (n.type === 'hardBreak' ? <br /> : <Marked text={n.text} marks={n.marks ?? []} />))}

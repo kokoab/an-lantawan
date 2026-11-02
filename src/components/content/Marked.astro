@@ -1,0 +1,30 @@
+---
+/** Text with its marks applied one by one, outermost first. Links open only http(s) and mailto. */
+import type { Mark } from '../../core/content/doc';
+
+interface Props {
+  text: string;
+  marks: Mark[];
+}
+
+const { text, marks } = Astro.props;
+const [mark, ...rest] = marks;
+const href =
+  mark?.type === 'link' && /^(https?:|mailto:)/i.test(mark.attrs.href) ? mark.attrs.href : null;
+const external = href !== null && !href.startsWith('mailto:');
+---
+
+{!mark && text}
+{mark?.type === 'bold' && <strong><Astro.self text={text} marks={rest} /></strong>}
+{mark?.type === 'italic' && <em><Astro.self text={text} marks={rest} /></em>}
+{mark?.type === 'underline' && <u><Astro.self text={text} marks={rest} /></u>}
+{
+  mark?.type === 'link' &&
+    (href ? (
+      <a href={href} rel={external ? 'noopener nofollow' : undefined} target={external ? '_blank' : undefined}>
+        <Astro.self text={text} marks={rest} />
+      </a>
+    ) : (
+      <Astro.self text={text} marks={rest} />
+    ))
+}
