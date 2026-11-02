@@ -234,8 +234,9 @@ export function recordResult(
   if (!m) return fail('That match is no longer in this bracket.');
   if (m.home === null || m.away === null)
     return fail('Both tribus need to be set before entering a score.');
-  if (![homeScore, awayScore].every((s) => Number.isInteger(s) && s >= 0)) {
-    return fail('Scores must be whole numbers, 0 or more.');
+  // Halves are allowed: a chess team match can end 2½–1½.
+  if (![homeScore, awayScore].every((s) => Number.isFinite(s) && s >= 0)) {
+    return fail('Scores must be 0 or more.');
   }
   if (homeScore === awayScore)
     return fail('A bracket match needs a winner. Enter the tiebreak score.');
