@@ -1,0 +1,35 @@
+---
+/** Fields of a person, for adding and editing. */
+import Field from './Field.astro';
+import PhotoField from './PhotoField.astro';
+
+interface Props {
+  values: Record<string, unknown>;
+  errors: Record<string, string>;
+  photo: { key: string } | null;
+  submit: string;
+}
+
+const { values, errors, photo, submit } = Astro.props;
+const v = (k: string) => (values[k] ?? '') as string;
+---
+
+<form class="form" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="intent" value="save" />
+  <div class="row two">
+    <Field name="name" id="person-name" label="Name" value={v('name')} error={errors.name} maxlength={80} />
+    <Field
+      name="slug"
+      label="URL name"
+      value={v('slug')}
+      error={errors.slug}
+      hint="Their page is at /people/this-name."
+      slugFrom="person-name"
+    />
+  </div>
+  <Field name="bio" label="Short bio" type="textarea" rows={3} value={v('bio')} error={errors.bio} maxlength={600} />
+  <PhotoField name="photo" label="Photo" current={photo} error={errors.photo} />
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{submit}</button>
+  </div>
+</form>

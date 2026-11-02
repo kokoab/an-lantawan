@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import { optionalId, optionalText, slug, text, wholeNumber } from '../core/forms';
+import {
+  checkbox,
+  id,
+  optionalId,
+  optionalText,
+  schoolYear,
+  slug,
+  text,
+  wholeNumber,
+} from '../core/forms';
 
 /** The section form. */
 export const sectionForm = z.object({
@@ -32,4 +41,17 @@ export const mediaForm = z.object({
   creditText: optionalText(120),
   focalX: z.enum(FOCAL_STEPS).transform(Number),
   focalY: z.enum(FOCAL_STEPS).transform(Number),
+});
+
+export const personForm = z.object({
+  name: text(80, 'Add their name.'),
+  slug,
+  bio: optionalText(600),
+});
+
+export const staffTermForm = z.object({
+  personId: id,
+  schoolYear,
+  position: text(80, 'Add the position, like Editor-in-chief.'),
+  sort: wholeNumber(0, 999),
 });

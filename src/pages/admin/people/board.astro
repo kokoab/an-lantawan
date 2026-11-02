@@ -1,0 +1,145 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import { parseForm, schoolYear as schoolYearField } from '../../../core/forms';
+import { db } from '../../../db/client';
+import { listBoard } from '../../../db/queries/admin/board';
+import {
+  addStaffTerm,
+  listPeopleChoices,
+  listSchoolYears,
+  removeStaffTerm,
+} from '../../../db/queries/admin/people';
+import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readForm, record } from '../../../lib/admin';
+import { staffTermForm } from '../../../lib/admin-schemas';
+
+const editor = editorOf(Astro);
+const thisYear = new Date().getFullYear();
+const currentYear =
+  new Date().getMonth() >= 7 ? `${thisYear}–${thisYear + 1}` : `${thisYear - 1}–${thisYear}`;
+const asked = schoolYearField.safeParse(Astro.url.searchParams.get('year') ?? '');
+const year = asked.success ? asked.data : currentYear;
+const here = `/admin/people/board?year=${encodeURIComponent(year)}`;
+
+let values: Record<string, unknown> = { schoolYear: year, sort: '0' };
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  if (one(form, 'intent') === 'remove') {
+    const personId = Number(one(form, 'personId'));
+    const termId = Number(one(form, 'termId'));
+    if (Number.isInteger(personId) && Number.isInteger(termId))
+      await removeStaffTerm(db, personId, termId);
+    await record(editor, {
+      action: 'update',
+      entityType: 'board',
+      summary: `Removed someone from the ${year} board`,
+    });
+    return doneRedirect(Astro, here, 'saved');
+  }
+  values = form;
+  const parsed = parseForm(staffTermForm, form);
+  if (parsed.ok) {
+    await addStaffTerm(db, parsed.data);
+    await record(editor, {
+      action: 'update',
+      entityType: 'board',
+      entityId: parsed.data.personId,
+      summary: `Added a ${parsed.data.position} to the ${parsed.data.schoolYear} board`,
+    });
+    return doneRedirect(
+      Astro,
+      `/admin/people/board?year=${encodeURIComponent(parsed.data.schoolYear)}`,
+      'saved',
+    );
+  }
+  errors = parsed.errors;
+  Astro.response.status = 422;
+}
+
+const [members, years, people] = await Promise.all([
+  listBoard(db, year),
+  listSchoolYears(db),
+  listPeopleChoices(db),
+]);
+const yearChoices = [...new Set([currentYear, ...years, year])].sort().reverse();
+---
+
+<Admin title="Editorial board" section="people" back={{ label: 'People', href: '/admin/people' }}>
+  <a slot="actions" class="btn btn-secondary" href="/about#editorial-board" target="_blank" rel="noopener">View on site</a>
+  <form class="toolbar" method="get">
+    <div class="field narrow">
+      <label for="f-year">School year</label>
+      <select id="f-year" name="year" data-autosubmit>
+        {yearChoices.map((y) => <option value={y} selected={y === year}>{y}</option>)}
+      </select>
+    </div>
+    <noscript><button class="btn btn-secondary" type="submit">Show</button></noscript>
+  </form>
+  <div class="columns main-side">
+    {
+      members.length === 0 ? (
+        <div class="empty-state">
+          <h2>Nobody on the {year} board yet</h2>
+          <p>Add each position on the right. The About page shows the newest school year that has anyone on it.</p>
+        </div>
+      ) : (
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col" class="num">Order</th>
+                <th scope="col">Position</th>
+                <th scope="col">Name</th>
+                <th scope="col"><span class="visually-hidden">Remove</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((m) => (
+                <tr>
+                  <td class="num">{m.sort}</td>
+                  <td>{m.position}</td>
+                  <th scope="row">
+                    <a href={`/admin/people/${m.personId}`}>{m.name}</a>
+                  </th>
+                  <td class="actions">
+                    <form method="post">
+                      <input type="hidden" name="intent" value="remove" />
+                      <input type="hidden" name="personId" value={m.personId} />
+                      <input type="hidden" name="termId" value={m.id} />
+                      <button class="link-button danger small" type="submit">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    <section class="panel">
+      <h2>Add to the board</h2>
+      <form class="form" method="post">
+        <Field
+          name="personId"
+          label="Person"
+          type="select"
+          empty="Choose someone"
+          options={people.map((p) => ({ value: p.id, label: p.name }))}
+          value={values.personId as string}
+          error={errors.personId}
+          hint="Not listed? Add them under People first."
+        />
+        <Field name="position" label="Position" value={values.position as string} error={errors.position} placeholder="Editor-in-chief" />
+        <div class="row two">
+          <Field name="schoolYear" label="School year" value={values.schoolYear as string} error={errors.schoolYear} />
+          <Field name="sort" label="Order" type="number" min={0} max={999} value={values.sort as string} error={errors.sort} hint="Lower comes first." />
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Add to the board</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</Admin>

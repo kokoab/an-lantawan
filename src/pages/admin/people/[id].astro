@@ -1,0 +1,183 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import PersonForm from '../../../components/admin/PersonForm.astro';
+import { parseForm } from '../../../core/forms';
+import { db } from '../../../db/client';
+import { getMedia } from '../../../db/queries/admin/media';
+import {
+  addStaffTerm,
+  getPersonById,
+  personSlugTaken,
+  removeStaffTerm,
+  setPersonArchived,
+  updatePerson,
+} from '../../../db/queries/admin/people';
+import Admin from '../../../layouts/Admin.astro';
+import {
+  doneRedirect,
+  editorOf,
+  idParam,
+  one,
+  readFormWithFiles,
+  record,
+} from '../../../lib/admin';
+import { personForm, staffTermForm } from '../../../lib/admin-schemas';
+import { resolveUpload } from '../../../lib/uploads';
+
+const editor = editorOf(Astro);
+const id = idParam(Astro.params.id);
+const person = id ? await getPersonById(db, id) : null;
+if (!person) return Astro.rewrite('/404');
+const here = `/admin/people/${person.id}`;
+
+let values: Record<string, unknown> = { ...person };
+let errors: Record<string, string> = {};
+let termValues: Record<string, unknown> = { sort: 0 };
+let termErrors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readFormWithFiles(Astro.request);
+  const intent = one(form.values, 'intent');
+  const log = (action: string, summary: string) =>
+    record(editor, { action, entityType: 'person', entityId: person.id, summary });
+
+  if (intent === 'archive' || intent === 'restore') {
+    await setPersonArchived(db, person.id, intent === 'archive');
+    await log(intent, `${intent === 'archive' ? 'Archived' : 'Restored'} ${person.name}`);
+    return doneRedirect(Astro, here, intent === 'archive' ? 'archived' : 'restored');
+  }
+  if (intent === 'remove-term') {
+    const termId = Number(one(form.values, 'termId'));
+    if (Number.isInteger(termId)) await removeStaffTerm(db, person.id, termId);
+    await log('update', `Removed a position from ${person.name}`);
+    return doneRedirect(Astro, here, 'saved');
+  }
+  if (intent === 'add-term') {
+    termValues = form.values;
+    const parsed = parseForm(staffTermForm, { ...form.values, personId: String(person.id) });
+    if (parsed.ok) {
+      await addStaffTerm(db, parsed.data);
+      await log('update', `Made ${person.name} ${parsed.data.position}, ${parsed.data.schoolYear}`);
+      return doneRedirect(Astro, here, 'saved');
+    }
+    termErrors = parsed.errors;
+  } else {
+    values = { ...person, ...form.values };
+    const parsed = parseForm(personForm, form.values);
+    if (parsed.ok) {
+      if (await personSlugTaken(db, parsed.data.slug, person.id))
+        errors.slug = 'Someone else has this URL name.';
+      else {
+        const photo = await resolveUpload(
+          db,
+          { name: 'photo', current: person.photoId, want: 'image', alt: parsed.data.name },
+          form,
+          editor.id,
+        );
+        if (!photo.ok) errors.photo = photo.error;
+        else {
+          await updatePerson(db, person.id, { ...parsed.data, photoId: photo.id });
+          await log('update', `Edited ${parsed.data.name}`);
+          return doneRedirect(Astro, here, 'saved');
+        }
+      }
+    } else errors = parsed.errors;
+  }
+  Astro.response.status = 422;
+}
+
+const photo = person.photoId ? await getMedia(db, person.photoId) : null;
+const thisYear = new Date().getFullYear();
+// School years start in August.
+const currentYear =
+  new Date().getMonth() >= 7 ? `${thisYear}–${thisYear + 1}` : `${thisYear - 1}–${thisYear}`;
+---
+
+<Admin title={person.name} section="people" back={{ label: 'People', href: '/admin/people' }}>
+  <a slot="actions" class="btn btn-secondary" href={`/people/${person.slug}`} target="_blank" rel="noopener">
+    View their page
+  </a>
+  <div class="columns main-side">
+    <section class="panel">
+      <PersonForm values={values} errors={errors} photo={photo} submit="Save" />
+    </section>
+    <div>
+      <section class="panel">
+        <h2>Positions</h2>
+        <p class="panel-note">The editorial board on the About page lists the newest school year.</p>
+        {
+          person.terms.length > 0 && (
+            <ul class="terms">
+              {person.terms.map((t) => (
+                <li>
+                  <span>
+                    <strong>{t.position}</strong>
+                    <span class="muted small">{t.schoolYear}</span>
+                  </span>
+                  <form method="post">
+                    <input type="hidden" name="intent" value="remove-term" />
+                    <input type="hidden" name="termId" value={t.id} />
+                    <button class="link-button danger small" type="submit">Remove</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        <form class="form" method="post">
+          <input type="hidden" name="intent" value="add-term" />
+          <Field name="position" label="Position" value={(termValues.position as string) ?? ''} error={termErrors.position} placeholder="Associate editor" />
+          <div class="row two">
+            <Field name="schoolYear" label="School year" value={(termValues.schoolYear as string) ?? currentYear} error={termErrors.schoolYear} />
+            <Field name="sort" label="Order on the board" type="number" min={0} max={999} value={(termValues.sort as string) ?? '0'} error={termErrors.sort} />
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-secondary" type="submit">Add position</button>
+          </div>
+        </form>
+      </section>
+      <section class="panel">
+        <h2>{person.archivedAt ? 'Archived' : 'Archive'}</h2>
+        {
+          person.archivedAt ? (
+            <form method="post">
+              <p class="panel-note">Hidden from the board and from credit pickers. Their bylines stay.</p>
+              <input type="hidden" name="intent" value="restore" />
+              <button class="btn btn-secondary" type="submit">Restore</button>
+            </form>
+          ) : (
+            <form method="post">
+              <p class="panel-note">Archiving hides them from the board and from credit pickers. Their bylines stay.</p>
+              <input type="hidden" name="intent" value="archive" />
+              <button class="btn btn-danger" type="submit" data-confirm={`Archive ${person.name}?`}>
+                Archive
+              </button>
+            </form>
+          )
+        }
+      </section>
+    </div>
+  </div>
+</Admin>
+
+<style>
+  .terms {
+    display: flex;
+    flex-direction: column;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+  }
+  .terms li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding-block: 8px;
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .terms li > span {
+    display: flex;
+    flex-direction: column;
+  }
+</style>

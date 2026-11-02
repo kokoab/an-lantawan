@@ -1,0 +1,119 @@
+---
+import Field from '../../../components/admin/Field.astro';
+import PersonForm from '../../../components/admin/PersonForm.astro';
+import { parseForm } from '../../../core/forms';
+import { db } from '../../../db/client';
+import { createPerson, listPeople, personSlugTaken } from '../../../db/queries/admin/people';
+import Admin from '../../../layouts/Admin.astro';
+import { editorOf, readFormWithFiles, record } from '../../../lib/admin';
+import { personForm } from '../../../lib/admin-schemas';
+import { resolveUpload } from '../../../lib/uploads';
+import { mediaUrl } from '../../../lib/urls';
+
+const editor = editorOf(Astro);
+let values: Record<string, unknown> = {};
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readFormWithFiles(Astro.request);
+  values = form.values;
+  const parsed = parseForm(personForm, form.values);
+  if (parsed.ok) {
+    if (await personSlugTaken(db, parsed.data.slug, null))
+      errors.slug = 'Someone else has this URL name.';
+    else {
+      const photo = await resolveUpload(
+        db,
+        { name: 'photo', current: null, want: 'image', alt: parsed.data.name },
+        form,
+        editor.id,
+      );
+      if (!photo.ok) errors.photo = photo.error;
+      else {
+        const id = await createPerson(db, { ...parsed.data, photoId: photo.id });
+        await record(editor, {
+          action: 'create',
+          entityType: 'person',
+          entityId: id,
+          summary: `Added ${parsed.data.name}`,
+        });
+        return Astro.redirect(`/admin/people/${id}?done=created`, 303);
+      }
+    }
+  } else errors = parsed.errors;
+  Astro.response.status = 422;
+}
+
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 80);
+const archived = Astro.url.searchParams.get('show') === 'archived';
+const rows = await listPeople(db, { q, archived });
+---
+
+<Admin title="People" section="people">
+  <a slot="actions" class="btn btn-secondary" href="/admin/people/board">Editorial board</a>
+  <div class="columns main-side">
+    <div>
+      <form class="toolbar" method="get" role="search">
+        <Field name="q" label="Find someone" type="search" value={q} />
+        <div class="field narrow">
+          <label for="f-show">Show</label>
+          <select id="f-show" name="show" data-autosubmit>
+            <option value="">Current</option>
+            <option value="archived" selected={archived}>Archived</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary" type="submit">Find</button>
+      </form>
+      {
+        rows.length === 0 ? (
+          <div class="empty-state">
+            <h2>{q ? 'Nobody by that name' : archived ? 'Nobody archived' : 'No people yet'}</h2>
+            <p>{q ? 'Check the spelling, or add them on the right.' : 'Add writers, photographers and staff on the right.'}</p>
+          </div>
+        ) : (
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">
+                    <span class="visually-hidden">Photo</span>
+                  </th>
+                  <th scope="col">Name</th>
+                  <th scope="col" class="num">Stories</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => (
+                  <tr>
+                    <td class="photo-cell">
+                      {p.photoKey ? <img class="thumb" src={mediaUrl(p.photoKey)} alt="" loading="lazy" /> : <span class="thumb" />}
+                    </td>
+                    <th scope="row">
+                      <a href={`/admin/people/${p.id}`}>{p.name}</a>
+                    </th>
+                    <td class="num">{p.stories}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+    <section class="panel">
+      <h2>Add someone</h2>
+      <PersonForm values={values} errors={errors} photo={null} submit="Add person" />
+    </section>
+  </div>
+</Admin>
+
+<style>
+  .photo-cell {
+    width: 64px;
+  }
+  .thumb {
+    display: block;
+    width: 40px;
+    height: 40px;
+  }
+</style>
