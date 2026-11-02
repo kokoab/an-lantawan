@@ -1,0 +1,45 @@
+---
+import SportsfestBand from '../../components/stories/SportsfestBand.astro';
+import StoryList from '../../components/stories/StoryList.astro';
+import { parsePage } from '../../core/paging';
+import { db } from '../../db/client';
+import { getCurrentSportsfest } from '../../db/queries/navigation';
+import { getSection } from '../../db/queries/stories';
+import Site from '../../layouts/Site.astro';
+import { loadStoryList } from '../../lib/story-list';
+
+const slug = Astro.params.section ?? '';
+const page = parsePage(Astro.url.searchParams.get('page'));
+const section = page ? await getSection(db, slug) : null;
+if (!section || !page) return Astro.rewrite('/404');
+
+const sectionIds = [section.id, ...section.children.map((c) => c.id)];
+const [list, sportsfest] = await Promise.all([
+  loadStoryList(db, { current: section.slug, sectionIds, page }),
+  slug === 'sports' ? getCurrentSportsfest(db) : null,
+]);
+if (page > list.pages) return Astro.rewrite('/404');
+
+const pageHref = (p: number) => (p === 1 ? `/${section.slug}` : `/${section.slug}?page=${p}`);
+const topSlug = section.parentId ? undefined : section.slug;
+---
+
+<Site
+  title={page === 1 ? section.name : `${section.name}, page ${page}`}
+  description={section.description ?? undefined}
+  current={topSlug}
+>
+  <StoryList
+    title={section.name}
+    intro={section.description}
+    filters={list.filters}
+    lead={list.lead}
+    grid={list.grid}
+    total={list.total}
+    page={page}
+    pages={list.pages}
+    pageHref={pageHref}
+  >
+    {sportsfest && page === 1 && <SportsfestBand slot="after-head" sportsfest={sportsfest} />}
+  </StoryList>
+</Site>

@@ -1,0 +1,27 @@
+---
+import StoryList from '../components/stories/StoryList.astro';
+import { parsePage } from '../core/paging';
+import { db } from '../db/client';
+import Site from '../layouts/Site.astro';
+import { loadStoryList } from '../lib/story-list';
+
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (!page) return Astro.rewrite('/404');
+const list = await loadStoryList(db, { current: null, sectionIds: [], page });
+if (page > list.pages) return Astro.rewrite('/404');
+const pageHref = (p: number) => (p === 1 ? '/stories' : `/stories?page=${p}`);
+---
+
+<Site title={page === 1 ? 'All stories' : `All stories, page ${page}`}>
+  <StoryList
+    title="All stories"
+    intro="Everything An Lantawan has published, newest first."
+    filters={list.filters}
+    lead={list.lead}
+    grid={list.grid}
+    total={list.total}
+    page={page}
+    pages={list.pages}
+    pageHref={pageHref}
+  />
+</Site>
