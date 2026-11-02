@@ -1,0 +1,451 @@
+---
+import MedalCount from '../../../../components/sportsfest/MedalCount.astro';
+import StatePill from '../../../../components/sportsfest/StatePill.astro';
+import TribuMark from '../../../../components/sportsfest/TribuMark.astro';
+import { manilaDay, ordinal, rowState } from '../../../../core/sportsfest/display';
+import { db } from '../../../../db/client';
+import { getTally, listEventRows, listNextMatches } from '../../../../db/queries/sportsfest';
+import Site from '../../../../layouts/Site.astro';
+import { formatDayMonth, formatTime } from '../../../../lib/format';
+import { sportsfestFromParam } from '../../../../lib/sportsfest-page';
+import { eventUrl, tribuUrl } from '../../../../lib/urls';
+
+const sf = await sportsfestFromParam(Astro.params.year);
+const tribu = sf?.tribus.find((t) => t.slug === Astro.params.slug);
+if (!sf || !tribu) return Astro.rewrite('/404');
+
+const [tally, rows, next] = await Promise.all([
+  getTally(db, sf),
+  listEventRows(db, sf.id),
+  sf.status === 'final' ? [] : listNextMatches(db, sf.id, tribu.id),
+]);
+const mine = tally.find((r) => r.tribu.id === tribu.id);
+const others = tally.filter((r) => r.tribu.id !== tribu.id);
+const byId = new Map(sf.tribus.map((t) => [t.id, t]));
+
+const MEDAL_NAMES = { 1: 'Gold', 2: 'Silver', 3: 'Bronze' } as const;
+const medals = rows
+  .flatMap((r) =>
+    ([1, 2, 3] as const)
+      .filter((p) => r.medals[p].includes(tribu.id))
+      .map((place) => ({ row: r, place })),
+  )
+  .sort((a, b) => a.place - b.place || a.row.event.name.localeCompare(b.row.event.name));
+const showAll = Astro.url.searchParams.get('medals') === 'all';
+const MEDALS_SHOWN = 8;
+const listed = showAll ? medals : medals.slice(0, MEDALS_SHOWN);
+
+// Judged and timed events have no matches; every tribu takes part, so they count as games too.
+const today = manilaDay(new Date());
+const when = (d: Date | null) =>
+  d ? (manilaDay(d) === today ? formatTime(d) : formatDayMonth(d)) : null;
+const openEvents = [...new Map(rows.map((r) => [r.event.id, r])).values()].filter(
+  (r) => r.event.type !== 'bracket' && rowState(r.event.status, r.medals[1].length > 0) !== 'final',
+);
+const games = [
+  ...next.map((m) => ({
+    key: `m${m.id}`,
+    live: m.status === 'ongoing',
+    when: when(m.startsAt),
+    venue: m.venue ?? m.eventVenue,
+    title: `${m.event}, ${m.category.toLowerCase()}`,
+    detail: m.stage,
+    href: eventUrl(sf.year, m.eventSlug),
+    sides: [
+      { tribu: m.homeTribuId ? byId.get(m.homeTribuId) : undefined, score: m.homeScore },
+      { tribu: m.awayTribuId ? byId.get(m.awayTribuId) : undefined, score: m.awayScore },
+    ],
+    note: null as string | null,
+  })),
+  ...openEvents.map((r) => ({
+    key: `e${r.event.id}`,
+    live: r.event.status === 'ongoing',
+    when: when(r.event.startsAt),
+    venue: r.event.venue,
+    title: r.event.name,
+    detail: { judged: 'Judged', race: 'Timed', mind: 'Ranked', bracket: '' }[r.event.type],
+    href: eventUrl(sf.year, r.event.slug),
+    sides: [],
+    note: r.event.note,
+  })),
+].slice(0, 3);
+---
+
+<Site title={`${tribu.name}, ${sf.name}`} description={`${tribu.name}'s medals and games at ${sf.name}.`} current="sports">
+  <section class="band framed head">
+    <TribuMark tribu={tribu} size="xl" />
+    <div class="titles">
+      <a class="back" href={`/sportsfest/${sf.year}`}>{sf.name}</a>
+      <h1>{tribu.name}</h1>
+      {
+        mine && (
+          <dl class="facts">
+            <div>
+              <dt>Rank</dt>
+              <dd>
+                {ordinal(mine.rank)} of {tally.length}
+              </dd>
+            </div>
+            <div>
+              <dt>Gold</dt>
+              <dd>{mine.gold}</dd>
+            </div>
+            <div>
+              <dt>Silver</dt>
+              <dd>{mine.silver}</dd>
+            </div>
+            <div>
+              <dt>Bronze</dt>
+              <dd>{mine.bronze}</dd>
+            </div>
+          </dl>
+        )
+      }
+    </div>
+  </section>
+
+  <section class="band framed block" aria-labelledby="medals-title">
+    <div class="block-head">
+      <h2 id="medals-title">Medals</h2>
+      {medals.length > 0 && <p>Showing {listed.length} of {medals.length}</p>}
+    </div>
+    {
+      medals.length === 0 ? (
+        <p class="empty">
+          {sf.status === 'upcoming'
+            ? `${tribu.name}'s medals show up here once the first events end.`
+            : `${tribu.name} has no medals yet.`}
+        </p>
+      ) : (
+        <>
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Event</th>
+                <th scope="col">Category</th>
+                <th scope="col">Medal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listed.map((m) => (
+                <tr>
+                  <th scope="row">
+                    <a href={eventUrl(sf.year, m.row.event.slug, m.row.categoryId)}>{m.row.event.name}</a>
+                  </th>
+                  <td class="muted">{m.row.category}</td>
+                  <td>
+                    <span class:list={['medal', MEDAL_NAMES[m.place].toLowerCase()]}>{MEDAL_NAMES[m.place]}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!showAll && medals.length > MEDALS_SHOWN && (
+            <a class="btn btn-secondary more" href={`${tribuUrl(sf.year, tribu.slug)}?medals=all#medals-title`}>
+              See all {medals.length} medals
+            </a>
+          )}
+        </>
+      )
+    }
+  </section>
+
+  {
+    games.length > 0 && (
+      <section class="band framed block" aria-labelledby="games-title">
+        <h2 id="games-title">{tribu.name}'s next games</h2>
+        <ul class="games">
+          {games.map((g) => (
+            <li>
+              <a href={g.href}>
+                <div class="game-top">
+                  <StatePill state={g.live ? 'ongoing' : 'upcoming'} label={g.when} />
+                  {g.venue && <span>{g.venue}</span>}
+                </div>
+                <strong>{g.title}</strong>
+                {g.detail && <span class="muted">{g.detail}</span>}
+                {g.sides.length > 0 && (
+                  <div class="sides">
+                    {g.sides.map((s) => (
+                      <div class="side">
+                        {s.tribu ? <TribuMark tribu={s.tribu} size="xs" /> : <span class="tbd" />}
+                        <span>{s.tribu?.name ?? 'To be decided'}</span>
+                        {g.live && <b>{s.score ?? 0}</b>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {g.note && <p class="muted">{g.note}</p>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  {
+    others.length > 0 && (
+      <section class="band framed block" aria-labelledby="others-title">
+        <h2 id="others-title">Other tribus</h2>
+        <ul class="others">
+          {others.map((r) => (
+            <li>
+              <a href={tribuUrl(sf.year, r.tribu.slug)}>
+                <TribuMark tribu={r.tribu} size="md" />
+                <div>
+                  <strong>{r.tribu.name}</strong>
+                  <span>
+                    {ordinal(r.rank)}, {r.gold} gold, {r.silver} silver, {r.bronze} bronze
+                  </span>
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+</Site>
+
+<style>
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-block: 48px;
+  }
+  .titles {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .back {
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+  .facts {
+    display: flex;
+    gap: 32px;
+    align-self: stretch;
+    margin: 4px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--grey-300);
+  }
+  dt {
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+  dd {
+    margin: 2px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.04em;
+  }
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-block: 48px;
+  }
+  .block-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .block-head p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+  .muted {
+    color: var(--grey-600);
+  }
+  .empty {
+    margin: 0;
+    padding-block: 20px;
+    border-top: 1px solid var(--grey-300);
+    color: var(--grey-600);
+  }
+  .more {
+    align-self: flex-start;
+  }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .table thead th {
+    padding-bottom: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--grey-600);
+    text-align: left;
+  }
+  .table tbody tr {
+    border-top: 1px solid var(--grey-300);
+  }
+  .table tbody tr:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .table td,
+  .table tbody th {
+    padding-block: 12px;
+    font-weight: inherit;
+    text-align: left;
+  }
+  .table tbody th {
+    font-weight: 600;
+  }
+  .table a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .medal {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .medal.gold {
+    background: var(--sunrise);
+  }
+  .medal.silver {
+    background: var(--grey-300);
+  }
+  .medal.bronze {
+    background: var(--copper);
+  }
+
+  .games,
+  .others {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .games a {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    padding: 16px;
+    border: 1px solid var(--grey-300);
+    font-size: 13px;
+    line-height: 18px;
+  }
+  .games a:hover,
+  .others a:hover {
+    border-color: var(--ink);
+  }
+  .game-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: var(--grey-600);
+  }
+  .games strong {
+    font-size: 15px;
+    line-height: 20px;
+  }
+  .games p {
+    margin: 12px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .sides {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .side {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-block: 3px;
+  }
+  .side span {
+    flex: 1;
+  }
+  .side b {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .tbd {
+    width: 20px;
+    height: 20px;
+    border: 1px dashed var(--grey-300);
+  }
+  .others a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    border: 1px solid var(--grey-300);
+  }
+  .others strong {
+    display: block;
+    font-size: 18px;
+    line-height: 22px;
+    letter-spacing: -0.03em;
+  }
+  .others span {
+    font-size: 11px;
+    color: var(--grey-600);
+  }
+
+  @media (min-width: 768px) {
+    .games,
+    .others {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .head {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 40px;
+      padding-block: 80px 64px;
+    }
+    h1 {
+      font-size: 104px;
+      line-height: 100px;
+    }
+    h2 {
+      font-size: 40px;
+      line-height: 44px;
+    }
+    .block {
+      gap: 24px;
+      padding-block: 96px 64px;
+    }
+    .others strong {
+      font-size: 22px;
+      line-height: 26px;
+    }
+  }
+</style>
