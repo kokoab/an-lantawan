@@ -15,6 +15,20 @@
       "when": 1793604607891,
       "tag": "0001_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793606012500,
+      "tag": "0002_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793606020439,
+      "tag": "0003_admins",
+      "breakpoints": true
     }
   ]
 }

@@ -2,14 +2,32 @@ import { type AnySQLiteColumn, index, integer, sqliteTable, text } from 'drizzle
 import { archivedAt, createdAt, id, oneOf, timestamp } from './columns';
 import { sections } from './publishing';
 
-/** People who sign in to the admin. Separate from `people`, who get bylines. */
+/**
+ * People allowed into the admin, by Google account email (stored lowercase).
+ * Archiving an editor signs them out everywhere and blocks new sign-ins.
+ * Separate from `people`, who get bylines.
+ */
 export const editors = sqliteTable('editors', {
   id: id(),
   name: text('name').notNull(),
-  email: text('email'),
+  email: text('email').notNull().unique(),
   createdAt: createdAt(),
   archivedAt: archivedAt(),
 });
+
+/** Admin sign-in sessions. `id` is the SHA-256 of the cookie token, never the token itself. */
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    editorId: integer('editor_id')
+      .notNull()
+      .references(() => editors.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('sessions_editor').on(t.editorId)],
+);
 
 /** Every editable line of site copy that isn't a story: tagline, footer text, page intros. */
 export const settings = sqliteTable('settings', {

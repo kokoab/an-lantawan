@@ -12,7 +12,7 @@ import {
   storyVersions,
   tags,
 } from './publishing';
-import { editors } from './site';
+import { editors, sessions } from './site';
 import {
   categories,
   events,
@@ -187,4 +187,10 @@ export const matchSetsRelations = relations(matchSets, ({ one }) => ({
 export const storyEventsRelations = relations(storyEvents, ({ one }) => ({
   story: one(stories, { fields: [storyEvents.storyId], references: [stories.id] }),
   event: one(events, { fields: [storyEvents.eventId], references: [events.id] }),
+}));
+
+export const editorsRelations = relations(editors, ({ many }) => ({ sessions: many(sessions) }));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  editor: one(editors, { fields: [sessions.editorId], references: [editors.id] }),
 }));
