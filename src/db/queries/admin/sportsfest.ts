@@ -325,6 +325,10 @@ function matchKeys(c: Competition) {
   return { keys, double, kinds };
 }
 
+/** The core bracket key of one knockout match, or null for round-robin matches. */
+export const bracketKey = (c: Competition, matchId: number) =>
+  matchKeys(c).keys.get(matchId) ?? null;
+
 /** The knockout matches of a category as the core bracket sees them. */
 export function toBracket(c: Competition): BracketMatch[] {
   const { keys, double, kinds } = matchKeys(c);

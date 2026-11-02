@@ -1,0 +1,642 @@
+---
+import Field from '../../../../components/admin/Field.astro';
+import TribuMark from '../../../../components/sportsfest/TribuMark.astro';
+import { parseForm, toDateTimeInput } from '../../../../core/forms';
+import {
+  clearResult,
+  doubleElimination,
+  recordResult,
+  singleElimination,
+} from '../../../../core/sportsfest/bracket';
+import { formatScore, pointsRuleText } from '../../../../core/sportsfest/display';
+import { bracketMedals, readFinishes, standingsFinishes } from '../../../../core/sportsfest/medals';
+import { roundRobinRounds, standings } from '../../../../core/sportsfest/standings';
+import { db } from '../../../../db/client';
+import {
+  addCategory,
+  applyBracket,
+  bracketKey,
+  createBracket,
+  createRoundRobin,
+  deleteCategory,
+  deleteCompetition,
+  deleteEvent,
+  eventHasResults,
+  eventSlugTaken,
+  getCompetition,
+  getEventAdmin,
+  getSportsfestRow,
+  listAllTribus,
+  listFinishes,
+  recordGroupResult,
+  renameCategory,
+  saveFinishes,
+  toBracket,
+  updateEvent,
+  updateMatchDetails,
+  updateStageRule,
+} from '../../../../db/queries/admin/sportsfest';
+import Admin from '../../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, idParam, one, readForm, record } from '../../../../lib/admin';
+import { categoryForm, eventForm, matchForm, pointsForm } from '../../../../lib/admin-schemas';
+import { eventUrl } from '../../../../lib/urls';
+
+const editor = editorOf(Astro);
+const year = /^\d{4}$/.test(Astro.params.year ?? '') ? Number(Astro.params.year) : null;
+const sf = year ? await getSportsfestRow(db, year) : null;
+const eventId = idParam(Astro.params.eventId);
+const event = sf && eventId ? await getEventAdmin(db, sf.id, eventId) : null;
+if (!sf || !event) return Astro.rewrite('/404');
+
+const requested = Number(Astro.url.searchParams.get('category'));
+const category = event.categories.find((c) => c.id === requested) ?? event.categories[0] ?? null;
+const base = `/admin/sportsfest/${sf.year}/${event.id}`;
+const here = category ? `${base}?category=${category.id}` : base;
+const allTribus = await listAllTribus(db);
+const teams = allTribus.filter((t) => sf.tribuIds.includes(t.id));
+const byId = new Map(allTribus.map((t) => [t.id, t]));
+
+let eventValues: Record<string, unknown> = { ...event, startsAt: toDateTimeInput(event.startsAt) };
+let errors: Record<string, string> = {};
+let problem: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const intent = one(form, 'intent');
+  const log = (summary: string) =>
+    record(editor, { action: 'update', entityType: 'event', entityId: event.id, summary });
+
+  if (intent === 'event') {
+    eventValues = form;
+    const parsed = parseForm(eventForm, form);
+    if (parsed.ok) {
+      const { categories: _, ...input } = parsed.data;
+      if (await eventSlugTaken(db, sf.id, input.slug, event.id))
+        errors.slug = 'Another event this year uses this URL name.';
+      else {
+        await updateEvent(db, event.id, input);
+        await log(`Edited ${input.name}, ${sf.name}`);
+        return doneRedirect(Astro, here, 'saved');
+      }
+    } else errors = parsed.errors;
+  } else if (intent === 'delete-event') {
+    if (await eventHasResults(db, event.id))
+      problem =
+        'This event has results or matches, so it can’t be deleted. Set it to Cancelled instead.';
+    else {
+      await deleteEvent(db, event.id);
+      await log(`Deleted ${event.name} from ${sf.name}`);
+      return doneRedirect(Astro, `/admin/sportsfest/${sf.year}`, 'deleted');
+    }
+  } else if (intent === 'add-category' || intent === 'rename-category') {
+    const parsed = parseForm(categoryForm, form);
+    if (!parsed.ok) problem = Object.values(parsed.errors)[0] ?? 'Check the category.';
+    else if (intent === 'add-category') {
+      await addCategory(db, event.id, parsed.data.name, parsed.data.sort);
+      await log(`Added the ${parsed.data.name} category to ${event.name}`);
+      return doneRedirect(Astro, base, 'created');
+    } else if (category) {
+      await renameCategory(db, event.id, category.id, parsed.data.name, parsed.data.sort);
+      await log(`Renamed a category of ${event.name} to ${parsed.data.name}`);
+      return doneRedirect(Astro, here, 'saved');
+    }
+  } else if (intent === 'delete-category' && category) {
+    await deleteCategory(db, event.id, category.id);
+    await log(`Removed the ${category.name} category from ${event.name}`);
+    return doneRedirect(Astro, base, 'deleted');
+  } else if (category && intent === 'results') {
+    const r = readFinishes(
+      teams.map((t) => ({
+        tribuId: t.id,
+        place: one(form, `place_${t.id}`),
+        mark: one(form, `mark_${t.id}`),
+      })),
+      teams.length,
+    );
+    if (!r.ok) problem = r.error;
+    else {
+      await saveFinishes(db, category.id, r.finishes);
+      await log(`Saved results of ${event.name}, ${category.name}`);
+      return doneRedirect(Astro, here, 'result');
+    }
+  } else if (category && intent === 'fill-results') {
+    const comp = await getCompetition(db, category.id);
+    const group = comp.stages.find((s) => s.kind === 'group');
+    const unplayed =
+      group &&
+      comp.matches.some(
+        (m) => m.stageId === group.id && m.status !== 'done' && m.status !== 'cancelled',
+      );
+    const finishes = unplayed
+      ? null
+      : group
+        ? standingsFinishes(
+            standings(
+              comp.entries.filter((e) => e.stageId === group.id).map((e) => e.tribuId),
+              comp.matches.flatMap((m) =>
+                m.stageId === group.id &&
+                m.status === 'done' &&
+                m.homeTribuId !== null &&
+                m.awayTribuId !== null &&
+                m.homeScore !== null &&
+                m.awayScore !== null
+                  ? [
+                      {
+                        homeTribuId: m.homeTribuId,
+                        awayTribuId: m.awayTribuId,
+                        homeScore: m.homeScore,
+                        awayScore: m.awayScore,
+                      },
+                    ]
+                  : [],
+              ),
+              { win: group.pointsWin, draw: group.pointsDraw, loss: group.pointsLoss },
+            ),
+          )
+        : bracketMedals(toBracket(comp));
+    if (!finishes)
+      problem = 'Some matches haven’t been played yet, so the places can’t be filled in.';
+    else {
+      await saveFinishes(db, category.id, finishes);
+      await log(`Filled in medals of ${event.name}, ${category.name} from the matches`);
+      return doneRedirect(Astro, here, 'result');
+    }
+  } else if (category && intent === 'create-competition') {
+    const format = one(form, 'format');
+    const seeds = teams
+      .map((_, i) => Number(one(form, `seed_${i + 1}`)))
+      .filter((n) => teams.some((t) => t.id === n));
+    const entrants = [...new Set(seeds)];
+    if (entrants.length < 2) problem = 'Choose at least two tribus.';
+    else if (format === 'roundrobin') {
+      const rule = parseForm(pointsForm, form);
+      await createRoundRobin(
+        db,
+        category.id,
+        entrants,
+        roundRobinRounds(entrants),
+        rule.ok ? rule.data : { win: 3, draw: 1, loss: 0 },
+      );
+      await log(`Set up a round robin for ${event.name}, ${category.name}`);
+      return doneRedirect(Astro, here, 'generated');
+    } else {
+      const made =
+        format === 'double'
+          ? doubleElimination(entrants)
+          : singleElimination(entrants, { thirdPlace: format === 'single3' });
+      if (!made.ok) problem = made.error;
+      else {
+        await createBracket(db, category.id, made.value);
+        await log(`Created the ${event.name}, ${category.name} bracket`);
+        return doneRedirect(Astro, here, 'generated');
+      }
+    }
+  } else if (category && intent === 'delete-competition') {
+    await deleteCompetition(db, category.id);
+    await log(`Removed the matches of ${event.name}, ${category.name}`);
+    return doneRedirect(Astro, here, 'deleted');
+  } else if (category && intent === 'points') {
+    const rule = parseForm(pointsForm, form);
+    const stageId = Number(one(form, 'stageId'));
+    if (!rule.ok) problem = 'Points must be numbers from 0 to 10.';
+    else {
+      await updateStageRule(db, stageId, rule.data);
+      return doneRedirect(Astro, here, 'saved');
+    }
+  } else if (category && intent === 'match') {
+    const comp = await getCompetition(db, category.id);
+    const match = comp.matches.find((m) => m.id === Number(one(form, 'matchId')));
+    const parsed = parseForm(matchForm, form);
+    if (!match) problem = 'That match is no longer here. Reload the page.';
+    else if (!parsed.ok) problem = Object.values(parsed.errors)[0] ?? 'Check the match.';
+    else {
+      const d = parsed.data;
+      const key = bracketKey(comp, match.id);
+      const decided = match.status === 'done' || match.status === 'bye';
+      // Tribus can be set by hand only while no result has decided the match.
+      const teamsChanged =
+        !decided && (d.homeTribuId !== match.homeTribuId || d.awayTribuId !== match.awayTribuId);
+      if (teamsChanged && d.homeTribuId !== null && d.homeTribuId === d.awayTribuId)
+        problem = 'A tribu can’t play itself.';
+      else {
+        const keepStatus = d.status === 'done' || d.status === 'bye' ? undefined : d.status;
+        await updateMatchDetails(db, match.id, {
+          startsAt: d.startsAt,
+          venue: d.venue,
+          ...(keepStatus && !decided ? { status: keepStatus } : {}),
+          ...(teamsChanged ? { homeTribuId: d.homeTribuId, awayTribuId: d.awayTribuId } : {}),
+        });
+        const scored = d.homeScore !== null && d.awayScore !== null;
+        if (key) {
+          const fresh = await getCompetition(db, category.id);
+          const bracket = toBracket(fresh);
+          const r = scored
+            ? recordResult(bracket, key, d.homeScore as number, d.awayScore as number)
+            : decided && match.status === 'done'
+              ? clearResult(bracket, key)
+              : null;
+          if (r && !r.ok) problem = r.error;
+          else if (r) await applyBracket(db, fresh, r.value);
+        } else {
+          await recordGroupResult(db, match.id, d.homeScore, d.awayScore);
+        }
+        if (!problem) {
+          await log(`Updated a match of ${event.name}, ${category.name}`);
+          return doneRedirect(Astro, `${here}#match-${match.id}`, scored ? 'result' : 'saved');
+        }
+      }
+    }
+  }
+  Astro.response.status = 422;
+}
+
+const [finishes, comp] = category
+  ? await Promise.all([listFinishes(db, category.id), getCompetition(db, category.id)])
+  : [[], null];
+const placeOf = new Map(finishes.map((f) => [f.tribuId, f]));
+const ev = (k: string) => (eventValues[k] ?? '') as string;
+const TYPES = [
+  { value: 'bracket', label: 'Matches (a bracket or round robin)' },
+  { value: 'race', label: 'Timed or measured' },
+  { value: 'judged', label: 'Judged' },
+  { value: 'mind', label: 'Ranked' },
+];
+const STATUSES = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'ongoing', label: 'Ongoing' },
+  { value: 'done', label: 'Done' },
+  { value: 'postponed', label: 'Postponed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const MATCH_STATUSES = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'ongoing', label: 'Live' },
+  { value: 'postponed', label: 'Postponed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const groups = comp
+  ? comp.stages.map((s) => ({
+      stage: s,
+      rounds: [...new Set(comp.matches.filter((m) => m.stageId === s.id).map((m) => m.round))]
+        .sort((a, b) => a - b)
+        .map((round) => ({
+          round,
+          matches: comp.matches.filter((m) => m.stageId === s.id && m.round === round),
+        })),
+    }))
+  : [];
+const name = (id: number | null) =>
+  id === null ? 'To be decided' : (byId.get(id)?.name ?? 'Unknown tribu');
+const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
+---
+
+<Admin title={event.name} section="sportsfest" back={{ label: sf.name, href: `/admin/sportsfest/${sf.year}` }}>
+  <a slot="actions" class="btn btn-secondary" href={eventUrl(sf.year, event.slug, category?.id)} target="_blank" rel="noopener">View on site</a>
+  {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
+
+  <nav class="tabs" aria-label="Categories">
+    {event.categories.map((c) => (
+      <a class:list={['btn', c.id === category?.id ? 'btn-primary' : 'btn-secondary']} href={`${base}?category=${c.id}`} aria-current={c.id === category?.id ? 'page' : undefined}>
+        {c.name}
+      </a>
+    ))}
+  </nav>
+
+  <div class="columns main-side">
+    <div>
+      {
+        category && (
+          <>
+            <form class="panel" method="post">
+              <div class="panel-head">
+                <h2>Results: {category.name}</h2>
+                <span class="muted small">Places 1 to 3 are the medals. Ties can share a place. Results are optional, like 12.84 seconds.</span>
+              </div>
+              <input type="hidden" name="intent" value="results" />
+              <div class="table-wrap">
+                <table class="table">
+                  <thead><tr><th scope="col">Tribu</th><th scope="col">Place</th><th scope="col">Time, distance or score</th></tr></thead>
+                  <tbody>
+                    {teams.map((t) => {
+                      const f = placeOf.get(t.id);
+                      return (
+                        <tr>
+                          <th scope="row"><span class="tribu"><TribuMark tribu={t} size="xs" />{t.name}</span></th>
+                          <td class="place">
+                            <select name={`place_${t.id}`} aria-label={`Place of ${t.name}`}>
+                              <option value="">No place</option>
+                              {teams.map((_, i) => (
+                                <option value={i + 1} selected={f?.place === i + 1}>
+                                  {i + 1}{i < 3 ? ` (${medalLabel(i + 1)})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td><input type="text" name={`mark_${t.id}`} value={f?.mark ?? ''} maxlength="60" aria-label={`Result of ${t.name}`} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit">Save results</button>
+                {comp && comp.stages.length > 0 && (
+                  <button class="btn btn-secondary" type="submit" name="intent" value="fill-results" data-confirm="Replace the places above with the ones the matches decided?">
+                    Fill in from the matches
+                  </button>
+                )}
+              </div>
+            </form>
+
+            <section class="panel">
+              <h2>Matches</h2>
+              {comp && comp.stages.length === 0 ? (
+                <form class="form" method="post">
+                  <p class="panel-note">Events decided by time, judges or ranking only need the results above. For games, set up the matches.</p>
+                  <input type="hidden" name="intent" value="create-competition" />
+                  <fieldset>
+                    <legend>Format</legend>
+                    <label class="check"><input type="radio" name="format" value="single3" checked /> Single elimination, with a third-place match</label>
+                    <label class="check"><input type="radio" name="format" value="single" /> Single elimination, both semifinal losers get bronze</label>
+                    <label class="check"><input type="radio" name="format" value="double" /> Double elimination (4, 8 or 16 tribus)</label>
+                    <label class="check"><input type="radio" name="format" value="roundrobin" /> Round robin: everyone plays everyone</label>
+                  </fieldset>
+                  <fieldset>
+                    <legend>Seeds</legend>
+                    <p class="hint">Seed 1 is the strongest. Top seeds meet as late as possible. Choose “Not playing” to leave a tribu out.</p>
+                    <div class="seeds">
+                      {teams.map((t, i) => (
+                        <label class="seed">
+                          <span>Seed {i + 1}</span>
+                          <select name={`seed_${i + 1}`}>
+                            <option value="">Not playing</option>
+                            {teams.map((o) => <option value={o.id} selected={o.id === t.id}>{o.name}</option>)}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend>Round-robin points</legend>
+                    <div class="row three">
+                      <Field name="win" label="Win" type="number" min={0} max={10} step="0.5" value="3" />
+                      <Field name="draw" label="Draw" type="number" min={0} max={10} step="0.5" value="1" />
+                      <Field name="loss" label="Loss" type="number" min={0} max={10} step="0.5" value="0" />
+                    </div>
+                  </fieldset>
+                  <div class="form-actions"><button class="btn btn-primary" type="submit">Set up the matches</button></div>
+                </form>
+              ) : (
+                <>
+                  {groups.map((g) => (
+                    <div class="stage">
+                      <h3>{g.stage.name}</h3>
+                      {g.stage.kind === 'group' && (
+                        <form class="rule" method="post">
+                          <input type="hidden" name="intent" value="points" />
+                          <input type="hidden" name="stageId" value={g.stage.id} />
+                          <span class="muted small">{pointsRuleText({ win: g.stage.pointsWin, draw: g.stage.pointsDraw, loss: g.stage.pointsLoss })}</span>
+                          <label class="small">Win <input type="number" name="win" min="0" max="10" step="0.5" value={g.stage.pointsWin} /></label>
+                          <label class="small">Draw <input type="number" name="draw" min="0" max="10" step="0.5" value={g.stage.pointsDraw} /></label>
+                          <label class="small">Loss <input type="number" name="loss" min="0" max="10" step="0.5" value={g.stage.pointsLoss} /></label>
+                          <button class="btn btn-secondary btn-small" type="submit">Save points</button>
+                        </form>
+                      )}
+                      {g.rounds.map((r) => (
+                        <div class="round">
+                          <p class="muted small">Round {r.round}</p>
+                          {r.matches.map((m) => {
+                            const decided = m.status === 'done' || m.status === 'bye';
+                            return (
+                              <form class:list={['match', { done: decided }]} method="post" id={`match-${m.id}`}>
+                                <input type="hidden" name="intent" value="match" />
+                                <input type="hidden" name="matchId" value={m.id} />
+                                <div class="side">
+                                  {decided ? (
+                                    <>
+                                      <span class:list={['team', { won: m.winnerTribuId === m.homeTribuId }]}>{name(m.homeTribuId)}</span>
+                                      <input type="hidden" name="homeTribuId" value={m.homeTribuId ?? ''} />
+                                    </>
+                                  ) : (
+                                    <select name="homeTribuId" aria-label="Home tribu">
+                                      <option value="">To be decided</option>
+                                      {teams.map((t) => <option value={t.id} selected={t.id === m.homeTribuId}>{t.name}</option>)}
+                                    </select>
+                                  )}
+                                  <input class="score" type="text" inputmode="decimal" name="homeScore" value={formatScore(m.homeScore)} aria-label={`Score of ${name(m.homeTribuId)}`} />
+                                </div>
+                                <div class="side">
+                                  {decided ? (
+                                    <>
+                                      <span class:list={['team', { won: m.winnerTribuId === m.awayTribuId }]}>{name(m.awayTribuId)}</span>
+                                      <input type="hidden" name="awayTribuId" value={m.awayTribuId ?? ''} />
+                                    </>
+                                  ) : (
+                                    <select name="awayTribuId" aria-label="Away tribu">
+                                      <option value="">To be decided</option>
+                                      {teams.map((t) => <option value={t.id} selected={t.id === m.awayTribuId}>{t.name}</option>)}
+                                    </select>
+                                  )}
+                                  <input class="score" type="text" inputmode="decimal" name="awayScore" value={formatScore(m.awayScore)} aria-label={`Score of ${name(m.awayTribuId)}`} />
+                                </div>
+                                <div class="details">
+                                  {m.status === 'bye' ? (
+                                    <span class="badge">Bye</span>
+                                  ) : decided ? (
+                                    <span class="badge ink">Final</span>
+                                  ) : (
+                                    <select name="status" aria-label="Match status">
+                                      {MATCH_STATUSES.map((s) => <option value={s.value} selected={s.value === m.status}>{s.label}</option>)}
+                                    </select>
+                                  )}
+                                  {decided && <input type="hidden" name="status" value={m.status} />}
+                                  <input type="datetime-local" name="startsAt" value={toDateTimeInput(m.startsAt)} aria-label="Starts" />
+                                  <input type="text" name="venue" value={m.venue ?? ''} placeholder="Venue" aria-label="Venue" maxlength="120" />
+                                  <button class="btn btn-secondary btn-small" type="submit">Save</button>
+                                </div>
+                                {m.status === 'done' && <p class="hint">To undo the result, clear both scores and save.</p>}
+                              </form>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <form method="post">
+                    <input type="hidden" name="intent" value="delete-competition" />
+                    <button class="btn btn-danger" type="submit" data-confirm="Remove every match of this category, with their scores? Results above stay.">Remove the matches</button>
+                  </form>
+                </>
+              )}
+            </section>
+          </>
+        )
+      }
+    </div>
+
+    <div>
+      <form class="panel form" method="post">
+        <h2>Event</h2>
+        <input type="hidden" name="intent" value="event" />
+        <Field name="name" id="event-name" label="Event" value={ev('name')} error={errors.name} maxlength={80} />
+        <Field name="slug" label="URL name" value={ev('slug')} error={errors.slug} />
+        <Field name="type" label="How it’s decided" type="select" options={TYPES} value={ev('type')} error={errors.type} />
+        <Field name="status" label="Status" type="select" options={STATUSES} value={ev('status')} error={errors.status} hint="A category with a gold medal shows as final on its own." />
+        <Field name="startsAt" label="Starts" type="datetime-local" value={ev('startsAt')} error={errors.startsAt} />
+        <Field name="venue" label="Venue" value={ev('venue')} error={errors.venue} />
+        <Field name="note" label="Note" value={ev('note')} error={errors.note} />
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Save event</button></div>
+      </form>
+
+      <section class="panel">
+        <h2>Categories</h2>
+        {category && (
+          <form class="form" method="post">
+            <input type="hidden" name="intent" value="rename-category" />
+            <div class="row two">
+              <Field name="name" id="cat-name" label={`Rename ${category.name}`} value={category.name} />
+              <Field name="sort" id="cat-sort" label="Order" type="number" min={0} max={99} value={category.sort} />
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" type="submit">Save category</button>
+              {event.categories.length > 1 && (
+                <button class="btn btn-danger" type="submit" name="intent" value="delete-category" data-confirm={`Remove ${category.name} with its results and matches?`}>
+                  Remove
+                </button>
+              )}
+            </div>
+          </form>
+        )}
+        <form class="form add-cat" method="post">
+          <input type="hidden" name="intent" value="add-category" />
+          <div class="row two">
+            <Field name="name" id="new-cat" label="Add a category" placeholder="Women’s" />
+            <Field name="sort" id="new-sort" label="Order" type="number" min={0} max={99} value={event.categories.length} />
+          </div>
+          <div class="form-actions"><button class="btn btn-secondary" type="submit">Add category</button></div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Delete</h2>
+        <p class="panel-note">Only events with no results or matches can be deleted. Otherwise, set the status to Cancelled.</p>
+        <form method="post">
+          <input type="hidden" name="intent" value="delete-event" />
+          <button class="btn btn-danger" type="submit" data-confirm={`Delete ${event.name}?`}>Delete event</button>
+        </form>
+      </section>
+    </div>
+  </div>
+</Admin>
+
+<style>
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tribu {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .place {
+    width: 160px;
+  }
+  .seeds {
+    display: grid;
+    gap: 8px;
+  }
+  .seed {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .stage {
+    margin-bottom: 24px;
+  }
+  .stage h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+  }
+  .rule {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .rule input {
+    width: 72px;
+    min-height: 32px;
+    padding: 4px 8px;
+  }
+  .round {
+    margin-bottom: 12px;
+  }
+  .round > p {
+    margin: 0 0 6px;
+  }
+  .match {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 10px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+    scroll-margin-top: 16px;
+  }
+  .match.done {
+    background: var(--grey-50);
+  }
+  .match:target {
+    border-color: var(--ink);
+  }
+  .side {
+    display: grid;
+    grid-template-columns: 1fr 80px;
+    gap: 6px;
+    align-items: center;
+  }
+  .team {
+    font-size: 14px;
+    color: var(--grey-600);
+  }
+  .team.won {
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .score {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .details {
+    display: grid;
+    gap: 6px;
+  }
+  .details .badge {
+    justify-self: start;
+  }
+  .match .hint {
+    margin: 0;
+  }
+  .add-cat {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--grey-300);
+  }
+  @media (min-width: 768px) {
+    .seeds {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .details {
+      grid-template-columns: 130px 1fr 1fr auto;
+      align-items: center;
+    }
+  }
+</style>
