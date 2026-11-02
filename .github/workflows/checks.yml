@@ -15,6 +15,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       - run: npx biome ci .
       - run: npx astro check
       - run: npm test
