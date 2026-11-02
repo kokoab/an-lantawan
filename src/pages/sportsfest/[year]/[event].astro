@@ -1,0 +1,453 @@
+---
+import Bracket from '../../../components/sportsfest/Bracket.astro';
+import Coverage from '../../../components/sportsfest/Coverage.astro';
+import MatchCard from '../../../components/sportsfest/MatchCard.astro';
+import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro';
+import TribuChip from '../../../components/sportsfest/TribuChip.astro';
+import TribuMark from '../../../components/sportsfest/TribuMark.astro';
+import { formatName, manilaDay, ROW_STATE_LABEL, rowState } from '../../../core/sportsfest/display';
+import { DEFAULT_POINTS, standings } from '../../../core/sportsfest/standings';
+import { db } from '../../../db/client';
+import { getEvent, listCoverage } from '../../../db/queries/sportsfest';
+import Site from '../../../layouts/Site.astro';
+import { formatDayMonth, formatDayRange, formatTime } from '../../../lib/format';
+import { sportsfestFromParam } from '../../../lib/sportsfest-page';
+import { eventUrl } from '../../../lib/urls';
+
+const sf = await sportsfestFromParam(Astro.params.year);
+if (!sf || !Astro.params.event) return Astro.rewrite('/404');
+const requested = Number(Astro.url.searchParams.get('category'));
+const page = await getEvent(
+  db,
+  sf.id,
+  Astro.params.event,
+  Number.isInteger(requested) ? requested : undefined,
+);
+if (!page) return Astro.rewrite('/404');
+
+const { event, category, results, stages } = page;
+const tribus = new Map(sf.tribus.map((t) => [t.id, t]));
+const coverage = await listCoverage(db, sf.id, { eventId: event.id });
+
+const groups = stages.filter((s) => s.kind === 'group');
+const knockouts = stages.filter((s) => s.kind !== 'group' && s.matches.length > 0);
+const gold = results.filter((r) => r.place === 1);
+const state = rowState(event.status, gold.length > 0);
+
+// Dates come from the matches when there are any, otherwise from the event.
+const times = [...stages.flatMap((s) => s.matches.map((m) => m.startsAt)), event.startsAt]
+  .filter((d): d is Date => d !== null)
+  .map(manilaDay)
+  .sort();
+const dates = times.length ? formatDayRange(times[0], times[times.length - 1]) : null;
+const facts = [
+  {
+    label: 'Format',
+    value: formatName(
+      event.type,
+      stages.map((s) => s.kind),
+    ),
+  },
+  event.venue && { label: 'Venue', value: event.venue },
+  dates && { label: times[0] === times[times.length - 1] ? 'Date' : 'Dates', value: dates },
+  { label: 'Status', value: ROW_STATE_LABEL[state] },
+].filter((f): f is { label: string; value: string } => !!f);
+
+const MEDALS = [
+  { place: 1, name: 'Gold', className: 'gold' },
+  { place: 2, name: 'Silver', className: 'silver' },
+  { place: 3, name: 'Bronze', className: 'bronze' },
+] as const;
+const medalCards = MEDALS.flatMap((m) =>
+  results
+    .filter((r) => r.place === m.place)
+    .flatMap((r) => {
+      const tribu = tribus.get(r.tribuId);
+      return tribu ? [{ ...m, tribu, mark: r.mark }] : [];
+    }),
+);
+
+const pointsRule = `${DEFAULT_POINTS.win} points for a win, ${DEFAULT_POINTS.draw} for a draw`;
+const groupTables = groups.map((g) => {
+  const ids = g.tribuIds.length
+    ? g.tribuIds
+    : [
+        ...new Set(
+          g.matches.flatMap((m) => [m.homeTribuId, m.awayTribuId]).filter((id) => id !== null),
+        ),
+      ];
+  const played = g.matches.flatMap((m) =>
+    m.status === 'done' &&
+    m.homeTribuId !== null &&
+    m.awayTribuId !== null &&
+    m.homeScore !== null &&
+    m.awayScore !== null
+      ? [
+          {
+            homeTribuId: m.homeTribuId,
+            awayTribuId: m.awayTribuId,
+            homeScore: m.homeScore,
+            awayScore: m.awayScore,
+          },
+        ]
+      : [],
+  );
+  const rounds = [...new Set(g.matches.map((m) => m.round))]
+    .sort((a, b) => a - b)
+    .map((round) => {
+      const matches = g.matches.filter((m) => m.round === round);
+      const first = matches.map((m) => m.startsAt).find((d) => d !== null);
+      return { round, title: `Round ${round}${first ? `, ${formatTime(first)}` : ''}`, matches };
+    });
+  return { stage: g, rows: standings(ids, played), rounds };
+});
+const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.length > 0;
+---
+
+<Site
+  title={`${event.name}${category && page.categories.length > 1 ? `, ${category.name}` : ''}, ${sf.name}`}
+  description={`Results of ${event.name} at ${sf.name}.`}
+  current="sports"
+>
+  <SportsfestHead title={event.name} back={{ label: sf.name, href: `/sportsfest/${sf.year}` }} facts={facts}>
+    {
+      page.categories.length > 1 && (
+        <nav class="categories" aria-label="Categories">
+          {page.categories.map((c) => (
+            <a
+              class:list={['btn', c.id === category?.id ? 'btn-primary' : 'btn-secondary']}
+              href={eventUrl(sf.year, event.slug, c.id)}
+              aria-current={c.id === category?.id ? 'page' : undefined}
+            >
+              {c.name}
+            </a>
+          ))}
+        </nav>
+      )
+    }
+  </SportsfestHead>
+
+  {
+    medalCards.length > 0 && (
+      <section class="band framed medals" aria-label="Medals">
+        {medalCards.map((m) => (
+          <div class:list={['medal', m.className]}>
+            <p>{m.name}</p>
+            <div class="medal-tribu">
+              <TribuMark tribu={m.tribu} size="md" />
+              <strong>{m.tribu.name}</strong>
+            </div>
+            {m.mark && <p class="mark">{m.mark}</p>}
+          </div>
+        ))}
+      </section>
+    )
+  }
+
+  {
+    groupTables.map((g) => (
+      <>
+        <section class="band framed block" aria-labelledby={`standings-${g.stage.id}`}>
+          <div class="block-head">
+            <h2 id={`standings-${g.stage.id}`}>{groups.length > 1 ? g.stage.name : 'Standings'}</h2>
+            <p>{pointsRule}</p>
+          </div>
+          <table class="table standings">
+            <thead>
+              <tr>
+                <th scope="col">
+                  <span class="visually-hidden">Rank</span>
+                </th>
+                <th scope="col">Tribu</th>
+                <th scope="col" class="num">Played</th>
+                <th scope="col" class="num">Won</th>
+                <th scope="col" class="num">Drawn</th>
+                <th scope="col" class="num">Lost</th>
+                <th scope="col" class="num">Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {g.rows.map((r) => {
+                const t = tribus.get(r.tribuId);
+                return (
+                  <tr>
+                    <td class="rank">{r.rank}</td>
+                    <th scope="row">{t && <TribuChip tribu={t} year={sf.year} size="xs" />}</th>
+                    <td class="num">{r.played}</td>
+                    <td class="num">{r.won}</td>
+                    <td class="num">{r.drawn}</td>
+                    <td class="num">{r.lost}</td>
+                    <td class="num strong">{r.points}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+        {g.rounds.length > 0 && (
+          <section class="band framed block" aria-labelledby={`rounds-${g.stage.id}`}>
+            <h2 id={`rounds-${g.stage.id}`}>Rounds</h2>
+            <div class="rounds">
+              {g.rounds.map((r) => (
+                <section aria-label={r.title}>
+                  <h3>{r.title}</h3>
+                  <div class="round-matches">
+                    {r.matches.map((m) => (
+                      <MatchCard match={m} tribus={tribus} hideTime />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </section>
+        )}
+      </>
+    ))
+  }
+
+  {
+    knockouts.length > 0 && (
+      <section class="band framed block" aria-labelledby="bracket-title">
+        <h2 id="bracket-title">Bracket</h2>
+        <Bracket stages={knockouts} tribus={tribus} />
+      </section>
+    )
+  }
+
+  {
+    stages.length === 0 && results.length > 0 && (
+      <section class="band framed block" aria-labelledby="results-title">
+        <h2 id="results-title">Results</h2>
+        <table class="table results">
+          <thead>
+            <tr>
+              <th scope="col">Place</th>
+              <th scope="col">Tribu</th>
+              {results.some((r) => r.mark) && <th scope="col">Result</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((r) => {
+              const t = tribus.get(r.tribuId);
+              return (
+                <tr>
+                  <td class="rank">{r.place}</td>
+                  <th scope="row">{t && <TribuChip tribu={t} year={sf.year} size="xs" />}</th>
+                  {results.some((x) => x.mark) && <td>{r.mark}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+    )
+  }
+
+  {
+    !hasResults && (
+      <section class="band framed block">
+        <p class="empty">
+          {state === 'upcoming'
+            ? `Results go up here once ${event.name.toLowerCase()} starts${event.startsAt ? ` on ${formatDayMonth(event.startsAt)}` : ''}.`
+            : 'Results go up here as soon as the editors enter them.'}
+          {event.note && ` ${event.note}`}
+        </p>
+      </section>
+    )
+  }
+
+  <Coverage title={`${event.name} coverage`} stories={coverage} />
+</Site>
+
+<style>
+  h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 32px;
+    letter-spacing: -0.04em;
+  }
+  h3 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+  .categories {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .categories .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-block: 48px;
+  }
+  .block-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px 16px;
+  }
+  .block-head p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+
+  .medals {
+    display: grid;
+    gap: 12px;
+    padding-block: 48px;
+  }
+  .medal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--ink);
+  }
+  .medal p {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+  }
+  .medal .mark {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .medal-tribu {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .medal strong {
+    font-size: 24px;
+    line-height: 28px;
+    letter-spacing: -0.04em;
+  }
+  .gold {
+    background: var(--sunrise);
+  }
+  .silver {
+    background: var(--grey-300);
+  }
+  .bronze {
+    background: var(--copper);
+  }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .table thead th {
+    padding-bottom: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--grey-600);
+    text-align: left;
+  }
+  .table tbody tr {
+    border-top: 1px solid var(--grey-300);
+  }
+  .table tbody tr:last-child {
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .table td,
+  .table tbody th {
+    padding-block: 12px;
+    font-weight: inherit;
+    text-align: left;
+  }
+  .table :global(.chip) {
+    font-size: 15px;
+  }
+  .table .rank {
+    width: 32px;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .table .num {
+    width: 44px;
+    text-align: center;
+  }
+  .table .strong {
+    font-weight: 700;
+  }
+  .standings .num:nth-child(4),
+  .standings .num:nth-child(5),
+  .standings .num:nth-child(6) {
+    display: none;
+  }
+
+  .rounds {
+    display: grid;
+    gap: 24px;
+  }
+  .round-matches {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .empty {
+    margin: 0;
+    padding-block: 8px;
+    color: var(--grey-600);
+  }
+
+  @media (min-width: 768px) {
+    .medals {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .rounds {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .standings .num:nth-child(4),
+    .standings .num:nth-child(5),
+    .standings .num:nth-child(6) {
+      display: table-cell;
+    }
+    .table .num {
+      width: 11%;
+    }
+  }
+  @media (min-width: 1024px) {
+    h2 {
+      font-size: 40px;
+      line-height: 44px;
+    }
+    .block {
+      gap: 24px;
+      padding-block: 96px 64px;
+    }
+    .medals {
+      gap: 16px;
+      padding-block: 64px;
+    }
+    .medal {
+      padding: 24px 20px;
+    }
+    .medal strong {
+      font-size: 32px;
+      line-height: 36px;
+    }
+    .table .rank {
+      width: 96px;
+      font-size: 24px;
+    }
+    .table :global(.chip) {
+      font-size: 17px;
+    }
+  }
+</style>
