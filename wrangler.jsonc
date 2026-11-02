@@ -9,13 +9,8 @@
     {
       "binding": "DB",
       "database_name": "an-lantawan",
+      "database_id": "4069612d-4dfb-49c5-878e-c9c04083ed46",
       "migrations_dir": "migrations"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "MEDIA",
-      "bucket_name": "an-lantawan-media"
     }
   ]
 }
