@@ -111,3 +111,16 @@ export async function listStories(
     pages,
   };
 }
+
+/** The newest published stories from every section. */
+export async function listLatest(db: Db, limit: number) {
+  const rows = await db
+    .select(summaryColumns)
+    .from(stories)
+    .innerJoin(sections, eq(sections.id, stories.sectionId))
+    .leftJoin(media, eq(media.id, stories.coverId))
+    .where(published)
+    .orderBy(desc(stories.publishedAt), desc(stories.id))
+    .limit(limit);
+  return rows.map(toSummary);
+}
