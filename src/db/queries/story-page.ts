@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Doc } from '../../core/content/doc';
 import type { Db } from '../client';
 import { media, people, sections, stories, storyAuthors, storyTags, tags } from '../schema';
+import { liveStory } from './live';
 
 export type Credit = {
   name: string;
@@ -30,7 +31,7 @@ export async function getStoryPage(db: Db, slug: string) {
     .from(stories)
     .innerJoin(sections, eq(sections.id, stories.sectionId))
     .leftJoin(media, eq(media.id, stories.coverId))
-    .where(and(eq(stories.slug, slug), eq(stories.status, 'published')))
+    .where(and(eq(stories.slug, slug), liveStory))
     .limit(1);
   if (!row) return null;
 

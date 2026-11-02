@@ -1,6 +1,7 @@
 import { and, count, desc, eq, type SQL } from 'drizzle-orm';
 import type { Db } from '../client';
 import { sections, stories, sumatMessages } from '../schema';
+import { liveStory } from './live';
 
 export type LetterFilter = 'all' | 'anonymous' | 'signed';
 
@@ -19,7 +20,7 @@ export async function listLetters(
       : filter === 'signed'
         ? eq(sumatMessages.sentAs, 'named')
         : undefined;
-  const where = and(eq(stories.kind, 'letter'), eq(stories.status, 'published'), sentAs);
+  const where = and(eq(stories.kind, 'letter'), liveStory, sentAs);
   const [{ total }] = await db
     .select({ total: count() })
     .from(stories)

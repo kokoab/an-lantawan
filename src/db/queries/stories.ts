@@ -1,6 +1,7 @@
 import { and, count, desc, eq, inArray, isNull, notInArray, type SQL, sql } from 'drizzle-orm';
 import type { Db } from '../client';
 import { media, people, sections, stories, storyAuthors } from '../schema';
+import { liveStory } from './live';
 
 /** What a story card or list item needs. */
 export interface StorySummary {
@@ -64,7 +65,7 @@ function toSummary(r: SummaryRow): StorySummary {
   };
 }
 
-const published = eq(stories.status, 'published');
+const published = liveStory;
 
 /** A section and the IDs of its subsections, or null if there is no such live section. */
 export async function getSection(db: Db, slug: string) {
