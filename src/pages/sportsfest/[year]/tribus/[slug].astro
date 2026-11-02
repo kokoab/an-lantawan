@@ -2,7 +2,7 @@
 import MedalCount from '../../../../components/sportsfest/MedalCount.astro';
 import StatePill from '../../../../components/sportsfest/StatePill.astro';
 import TribuMark from '../../../../components/sportsfest/TribuMark.astro';
-import { manilaDay, ordinal, rowState } from '../../../../core/sportsfest/display';
+import { formatScore, manilaDay, ordinal, rowState } from '../../../../core/sportsfest/display';
 import { db } from '../../../../db/client';
 import { getTally, listEventRows, listNextMatches } from '../../../../db/queries/sportsfest';
 import Site from '../../../../layouts/Site.astro';
@@ -170,7 +170,7 @@ const games = [
                       <div class="side">
                         {s.tribu ? <TribuMark tribu={s.tribu} size="xs" /> : <span class="tbd" />}
                         <span>{s.tribu?.name ?? 'To be decided'}</span>
-                        {g.live && <b>{s.score ?? 0}</b>}
+                        {g.live && <b>{formatScore(s.score ?? 0)}</b>}
                       </div>
                     ))}
                   </div>

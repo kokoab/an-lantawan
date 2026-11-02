@@ -6,7 +6,7 @@ import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro'
 import TribuChip from '../../../components/sportsfest/TribuChip.astro';
 import TribuMark from '../../../components/sportsfest/TribuMark.astro';
 import { formatName, manilaDay, ROW_STATE_LABEL, rowState } from '../../../core/sportsfest/display';
-import { DEFAULT_POINTS, standings } from '../../../core/sportsfest/standings';
+import { standings } from '../../../core/sportsfest/standings';
 import { db } from '../../../db/client';
 import { getEvent, listCoverage } from '../../../db/queries/sportsfest';
 import Site from '../../../layouts/Site.astro';
@@ -67,7 +67,6 @@ const medalCards = MEDALS.flatMap((m) =>
     }),
 );
 
-const pointsRule = `${DEFAULT_POINTS.win} points for a win, ${DEFAULT_POINTS.draw} for a draw`;
 const groupTables = groups.map((g) => {
   const ids = g.tribuIds.length
     ? g.tribuIds
@@ -99,7 +98,8 @@ const groupTables = groups.map((g) => {
       const first = matches.map((m) => m.startsAt).find((d) => d !== null);
       return { round, title: `Round ${round}${first ? `, ${formatTime(first)}` : ''}`, matches };
     });
-  return { stage: g, rows: standings(ids, played), rounds };
+  const rule = { win: g.pointsWin, draw: g.pointsDraw, loss: g.pointsLoss };
+  return { stage: g, rows: standings(ids, played, rule), rounds, rule: pointsRuleText(rule) };
 });
 const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.length > 0;
 ---
@@ -150,7 +150,7 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
         <section class="band framed block" aria-labelledby={`standings-${g.stage.id}`}>
           <div class="block-head">
             <h2 id={`standings-${g.stage.id}`}>{groups.length > 1 ? g.stage.name : 'Standings'}</h2>
-            <p>{pointsRule}</p>
+            <p>{g.rule}</p>
           </div>
           <table class="table standings">
             <thead>
@@ -177,7 +177,7 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
                     <td class="num">{r.won}</td>
                     <td class="num">{r.drawn}</td>
                     <td class="num">{r.lost}</td>
-                    <td class="num strong">{r.points}</td>
+                    <td class="num strong">{formatScore(r.points)}</td>
                   </tr>
                 );
               })}
@@ -224,6 +224,7 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
               <th scope="col">Place</th>
               <th scope="col">Tribu</th>
               {results.some((r) => r.mark) && <th scope="col">Result</th>}
+              <th scope="col">Medal</th>
             </tr>
           </thead>
           <tbody>
@@ -234,6 +235,15 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
                   <td class="rank">{r.place}</td>
                   <th scope="row">{t && <TribuChip tribu={t} year={sf.year} size="xs" />}</th>
                   {results.some((x) => x.mark) && <td>{r.mark}</td>}
+                  <td>
+                    {r.place <= 3 ? (
+                      <span class:list={['medal-pill', MEDALS[r.place - 1].className]}>
+                        {MEDALS[r.place - 1].name}
+                      </span>
+                    ) : (
+                      <span class="muted">None</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -334,6 +344,16 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
     font-size: 24px;
     line-height: 28px;
     letter-spacing: -0.04em;
+  }
+  .medal-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .muted {
+    color: var(--grey-600);
   }
   .gold {
     background: var(--sunrise);

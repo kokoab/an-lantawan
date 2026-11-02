@@ -1,5 +1,6 @@
 ---
 /** One match: its label and time, then each side with its score. The winner is in bold. */
+import { formatScore } from '../../core/sportsfest/display';
 import type { MatchView, TribuInfo } from '../../db/queries/sportsfest';
 import { formatDayMonth, formatTime } from '../../lib/format';
 import TribuMark from './TribuMark.astro';
@@ -42,7 +43,7 @@ const STATUS: Partial<Record<MatchView['status'], string>> = {
       <div class:list={['side', { won: done && s.id !== null && s.id === m.winnerTribuId }]}>
         {s.tribu ? <TribuMark tribu={s.tribu} size="xs" /> : <span class="tbd-mark" />}
         <span class="name">{s.tribu?.name ?? 'To be decided'}</span>
-        <span class="score">{s.score ?? ''}</span>
+        <span class="score">{formatScore(s.score)}</span>
       </div>
     ))
   }
