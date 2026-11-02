@@ -1,0 +1,524 @@
+---
+/**
+ * Site header with the Menu panel. Desktop (≥1024px) shows the main links; phones show
+ * Sumat and a menu icon. The panel has a desktop layout and a phone layout.
+ */
+import CloseIcon from '../../assets/icons/close.svg';
+import MenuIcon from '../../assets/icons/menu.svg';
+import MenuMobileIcon from '../../assets/icons/menu-mobile.svg';
+import SearchIcon from '../../assets/icons/search.svg';
+import type { Navigation } from '../../db/queries/navigation';
+import Torch from '../Torch.astro';
+
+interface Props {
+  nav: Navigation;
+  siteName: string;
+  tagline: string;
+  facebookUrl: string;
+  sportsfest: { name: string; status: string } | null;
+  /** Section slug or path of the current page, to mark its link. */
+  current?: string;
+}
+
+const { nav, siteName, tagline, facebookUrl, sportsfest, current } = Astro.props;
+const isCurrent = (href: string) => current !== undefined && href === `/${current}`;
+const ongoing = sportsfest?.status === 'ongoing';
+const sportsfestLinks = sportsfest
+  ? [
+      { label: 'All events', href: '/sportsfest/events' },
+      { label: 'Medal tally', href: '/sportsfest#tally' },
+      { label: 'Past Sportsfests', href: '/sportsfest/past' },
+    ]
+  : [];
+---
+
+<header class="site-header" data-menu-root>
+  <div class="bar">
+    <a class="lockup" href="/" aria-label={`${siteName} home`}>
+      <Torch class="mark" />
+      <span>{siteName}</span>
+    </a>
+
+    <nav class="main-nav" aria-label="Main">
+      {
+        nav.header.map((link) => (
+          <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="actions">
+      <a class="search-link" href="/search" aria-label="Search">
+        <SearchIcon />
+      </a>
+      <button class="menu-button" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>
+        <span class="menu-closed"><MenuIcon /><span>Menu</span></span>
+        <span class="menu-open">Close</span>
+      </button>
+      <a class="btn btn-sunrise write" href="/sumat">Write to Sumat</a>
+    </div>
+
+    <div class="actions-phone">
+      <a class="btn btn-sunrise sumat" href="/sumat">Sumat</a>
+      <button class="icon-button" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>
+        <span class="menu-closed"><MenuMobileIcon /><span class="visually-hidden">Open menu</span></span>
+        <span class="menu-open"><CloseIcon /><span class="visually-hidden">Close menu</span></span>
+      </button>
+    </div>
+  </div>
+
+  <div id="site-menu" class="menu" hidden data-menu>
+    <div class="overlay" data-menu-close></div>
+
+    <div class="panel desktop-panel">
+      <form class="search-field" action="/search" method="get" role="search">
+        <SearchIcon />
+        <label class="visually-hidden" for="menu-search">Search</label>
+        <input id="menu-search" name="q" type="search" placeholder="Search stories, events and issues" />
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+
+      <div class="groups">
+        <div class="group">
+          <p class="group-label">Sections</p>
+          {nav.sections.map((l) => <a class="big" href={l.href}>{l.label}</a>)}
+        </div>
+        {
+          sportsfest && (
+            <div class="group">
+              <p class="group-label">Sportsfest</p>
+              <a href="/sportsfest">
+                {sportsfest.name}
+                {ongoing && <span class="tag">Ongoing</span>}
+              </a>
+              {sportsfestLinks.map((l) => <a href={l.href}>{l.label}</a>)}
+            </div>
+          )
+        }
+        <div class="group">
+          <p class="group-label">The publication</p>
+          {nav.publication.map((l) => <a href={l.href}>{l.label}</a>)}
+        </div>
+        <div class="group">
+          <p class="group-label">Write to us</p>
+          {nav.write.map((l) => <a href={l.href}>{l.label}</a>)}
+        </div>
+      </div>
+
+      <div class="foot">
+        <p>{tagline}</p>
+        <a href={facebookUrl} rel="noopener" target="_blank">Facebook</a>
+      </div>
+    </div>
+
+    <div class="panel phone-panel">
+      <form class="search-field" action="/search" method="get" role="search">
+        <SearchIcon />
+        <label class="visually-hidden" for="menu-search-phone">Search</label>
+        <input id="menu-search-phone" name="q" type="search" placeholder="Search stories" />
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+
+      <div class="phone-sections">
+        {nav.sections.map((l) => <a href={l.href}>{l.label}</a>)}
+        {
+          sportsfest && (
+            <a href="/sportsfest">
+              Sportsfest
+              {ongoing && <span class="tag">Ongoing</span>}
+            </a>
+          )
+        }
+      </div>
+
+      <p class="group-label phone-label">The publication</p>
+      <div class="phone-links">
+        {nav.publication.map((l) => <a href={l.href}>{l.label}</a>)}
+        {nav.write.filter((l) => l.href !== '/sumat').map((l) => <a href={l.href}>{l.label}</a>)}
+      </div>
+
+      <div class="sumat-card">
+        <p class="sumat-title">Write to the editorial team</p>
+        <p>Through Sumat. Anonymous unless you sign it.</p>
+        <a class="btn btn-primary" href="/sumat">Write to Sumat</a>
+      </div>
+
+      <a class="facebook" href={facebookUrl} rel="noopener" target="_blank">Follow {siteName} on Facebook</a>
+    </div>
+  </div>
+</header>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-menu-root]');
+  const menu = root?.querySelector<HTMLElement>('[data-menu]');
+  const toggles = [...(root?.querySelectorAll<HTMLButtonElement>('[data-menu-toggle]') ?? [])];
+  let lastToggle: HTMLButtonElement | null = null;
+
+  function setOpen(open: boolean) {
+    if (!root || !menu) return;
+    menu.hidden = !open;
+    root.toggleAttribute('data-open', open);
+    document.documentElement.toggleAttribute('data-menu-open', open);
+    for (const t of toggles) t.setAttribute('aria-expanded', String(open));
+    if (open) {
+      const panel = [...menu.querySelectorAll<HTMLElement>('.panel')].find((p) => p.offsetParent);
+      panel?.querySelector<HTMLInputElement>('input')?.focus();
+    } else {
+      lastToggle?.focus();
+    }
+  }
+
+  for (const t of toggles) {
+    t.addEventListener('click', () => {
+      lastToggle = t;
+      setOpen(menu?.hidden === true);
+    });
+  }
+  menu?.querySelector('[data-menu-close]')?.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && menu?.hidden === false) setOpen(false);
+  });
+</script>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .bar {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    padding-inline: 16px;
+    background: var(--white);
+    border-bottom: 1px solid var(--grey-300);
+  }
+  .lockup {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 24px;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+  }
+  .lockup :global(.mark) {
+    width: 18.77px;
+    height: 30px;
+    flex: none;
+  }
+  .main-nav,
+  .actions {
+    display: none;
+  }
+  .actions-phone {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .sumat {
+    padding: 9px 16px;
+  }
+  .icon-button {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+  .menu-open {
+    display: none;
+  }
+  [data-open] .menu-open {
+    display: inline-flex;
+  }
+  [data-open] .menu-closed {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .bar {
+      height: 76px;
+      padding-inline: var(--gutter);
+    }
+    .lockup {
+      gap: 11px;
+      font-size: 23px;
+      line-height: 27.6px;
+    }
+    .lockup :global(.mark) {
+      width: 22.53px;
+      height: 36px;
+    }
+    .main-nav {
+      display: flex;
+      gap: 32px;
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 20px;
+      letter-spacing: -0.01em;
+    }
+    .main-nav a:hover,
+    .main-nav a[aria-current='page'] {
+      text-decoration: underline;
+      text-underline-offset: 6px;
+      text-decoration-thickness: 1.5px;
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .actions-phone {
+      display: none;
+    }
+    .search-link {
+      display: block;
+      width: 22px;
+      height: 22px;
+    }
+    .menu-button {
+      display: flex;
+      align-items: center;
+      padding: 0;
+      border: 0;
+      background: none;
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 20px;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+    }
+    .menu-button .menu-closed {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    [data-open] .menu-button .menu-closed {
+      display: none;
+    }
+  }
+
+  /* Menu */
+  .menu {
+    position: fixed;
+    inset: 64px 0 0;
+    z-index: 1;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgb(10 10 10 / 0.45);
+  }
+  .panel {
+    position: relative;
+    background: var(--white);
+  }
+  .desktop-panel {
+    display: none;
+  }
+  .phone-panel {
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 48px 24px 67px;
+  }
+  @media (min-width: 1024px) {
+    .menu {
+      inset: 76px 0 0;
+    }
+    .phone-panel {
+      display: none;
+    }
+    .desktop-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      padding: 40px var(--gutter) 48px;
+      border-bottom: 1px solid var(--ink);
+    }
+  }
+
+  .search-field {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 8px 8px 20px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .search-field input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    background: none;
+    font-size: 18px;
+    line-height: 24px;
+    letter-spacing: -0.01em;
+  }
+  .search-field input::placeholder {
+    color: var(--grey-600);
+  }
+  .search-field input:focus {
+    outline: none;
+  }
+  .search-field:focus-within {
+    border-color: var(--ink);
+  }
+  .phone-panel .search-field {
+    gap: 10px;
+    padding: 6px 6px 6px 16px;
+    margin-bottom: 16px;
+  }
+
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+  }
+  .group {
+    display: flex;
+    flex-direction: column;
+  }
+  .group-label {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 16px;
+    letter-spacing: -0.01em;
+    color: var(--grey-600);
+  }
+  .group a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-block: 10px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 24px;
+    letter-spacing: -0.02em;
+  }
+  .group a.big {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 28px;
+  }
+  .group a:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--ink);
+    background: var(--sunrise);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+    letter-spacing: -0.01em;
+  }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 16px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+  .foot p {
+    margin: 0;
+    font-weight: 500;
+    color: var(--grey-600);
+  }
+  .foot a {
+    font-weight: 600;
+  }
+
+  .phone-sections {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--grey-300);
+    padding-bottom: 12px;
+  }
+  .phone-sections a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-block: 16px;
+    border-top: 1px solid var(--grey-300);
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 40px;
+    letter-spacing: -0.04em;
+  }
+  .phone-label {
+    padding-top: 16px;
+    margin-bottom: 4px;
+  }
+  .phone-links {
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-links a {
+    padding-block: 12px;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 26px;
+    letter-spacing: -0.02em;
+  }
+  .sumat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+    padding: 24px;
+    border: 1px solid var(--ink);
+    background: var(--sunrise);
+  }
+  .sumat-card p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 22px;
+    letter-spacing: -0.01em;
+  }
+  .sumat-card .sumat-title {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 28px;
+    letter-spacing: -0.03em;
+  }
+  .sumat-card .btn {
+    margin-top: 4px;
+  }
+  .facebook {
+    margin-top: 24px;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: -0.01em;
+  }
+
+  :global(html[data-menu-open]) {
+    overflow: hidden;
+  }
+  @media (min-width: 1024px) {
+    :global(html[data-menu-open]) {
+      overflow: auto;
+    }
+  }
+</style>
