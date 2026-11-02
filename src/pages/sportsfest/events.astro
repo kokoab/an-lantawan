@@ -1,0 +1,10 @@
+---
+/** All events of the newest Sportsfest, keeping any search and filters. */
+import { db } from '../../db/client';
+import { getCurrentSportsfest } from '../../db/queries/navigation';
+
+const current = await getCurrentSportsfest(db);
+return Astro.rewrite(
+  current ? `/sportsfest/${current.year}/events${Astro.url.search}` : '/sportsfest',
+);
+---

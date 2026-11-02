@@ -1,0 +1,246 @@
+---
+import SearchField from '../../../components/site/SearchField.astro';
+import EventsTable from '../../../components/sportsfest/EventsTable.astro';
+import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro';
+import Pagination from '../../../components/stories/Pagination.astro';
+import { parsePage } from '../../../core/paging';
+import { MAX_QUERY_LENGTH } from '../../../core/search/query';
+import { filterRows, manilaDay, type RowState, rowState } from '../../../core/sportsfest/display';
+import { db } from '../../../db/client';
+import { listEventRows } from '../../../db/queries/sportsfest';
+import Site from '../../../layouts/Site.astro';
+import { formatDayMonth } from '../../../lib/format';
+import { sportsfestFromParam } from '../../../lib/sportsfest-page';
+
+const sf = await sportsfestFromParam(Astro.params.year);
+if (!sf) return Astro.rewrite('/404');
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (!page) return Astro.rewrite('/404');
+
+const STATES: Array<{ value: RowState | null; label: string }> = [
+  { value: null, label: 'All' },
+  { value: 'ongoing', label: 'Ongoing' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'final', label: 'Final' },
+];
+const params = Astro.url.searchParams;
+const q = (params.get('q') ?? '').trim().slice(0, MAX_QUERY_LENGTH);
+const state = STATES.find((s) => s.value === params.get('show'))?.value ?? null;
+const tribu = sf.tribus.find((t) => t.slug === params.get('tribu')) ?? null;
+
+const all = (await listEventRows(db, sf.id)).map((r) => ({
+  ...r,
+  event: r.event,
+  name: r.event.name,
+  state: rowState(r.event.status, r.medals[1].length > 0),
+  day: r.event.startsAt ? manilaDay(r.event.startsAt) : null,
+  medalists: [...r.medals[1], ...r.medals[2], ...r.medals[3]],
+}));
+const days = [...new Set(all.flatMap((r) => r.day ?? []))].sort();
+const day = days.find((d) => d === params.get('day')) ?? null;
+
+const found = filterRows(
+  all.map((r) => ({ ...r, event: r.event.name, category: r.category, row: r })),
+  { q, state, tribuId: tribu?.id ?? null, day },
+).map((r) => r.row);
+
+const PER_PAGE = 20;
+const pages = Math.max(1, Math.ceil(found.length / PER_PAGE));
+if (page > pages) return Astro.rewrite('/404');
+const shown = found.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+const filtered = Boolean(q || state || tribu || day);
+
+const base = `/sportsfest/${sf.year}/events`;
+const href = (change: { show?: RowState | null; page?: number }) => {
+  const u = new URLSearchParams();
+  if (q) u.set('q', q);
+  const show = 'show' in change ? change.show : state;
+  if (show) u.set('show', show);
+  if (tribu) u.set('tribu', tribu.slug);
+  if (day) u.set('day', day);
+  if (change.page && change.page > 1) u.set('page', String(change.page));
+  const s = u.toString();
+  return s ? `${base}?${s}` : base;
+};
+---
+
+<Site
+  title={`All events, ${sf.name}`}
+  description={`Every medal event of ${sf.name}, its schedule and its winners.`}
+  current="sports"
+>
+  <SportsfestHead
+    title="All events"
+    intro="Every medal event, its schedule and its winners. Search by sport, or filter by tribu or day."
+    back={{ label: sf.name, href: `/sportsfest/${sf.year}` }}
+  >
+    <form class="search" action={base} method="get" role="search">
+      <SearchField id="events-search" size="large" value={q} placeholder="Search events, like basketball or 100 meters" inForm />
+      {state && <input type="hidden" name="show" value={state} />}
+      <div class="filters">
+        <nav class="states" aria-label="Show events">
+          {
+            STATES.map((s) => (
+              <a
+                class:list={['btn', s.value === state ? 'btn-primary' : 'btn-secondary']}
+                href={href({ show: s.value })}
+                aria-current={s.value === state ? 'page' : undefined}
+              >
+                {s.label}
+              </a>
+            ))
+          }
+        </nav>
+        <div class="selects">
+          <label>
+            <span class="visually-hidden">Tribu</span>
+            <select name="tribu" data-autosubmit>
+              <option value="">All tribus</option>
+              {sf.tribus.map((t) => <option value={t.slug} selected={t.id === tribu?.id}>{t.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span class="visually-hidden">Day</span>
+            <select name="day" data-autosubmit>
+              <option value="">All days</option>
+              {days.map((d) => <option value={d} selected={d === day}>{formatDayMonth(d)}</option>)}
+            </select>
+          </label>
+          <noscript><button class="btn btn-secondary" type="submit">Apply</button></noscript>
+        </div>
+      </div>
+    </form>
+  </SportsfestHead>
+
+  <section class="band framed list" aria-labelledby="count-title">
+    <div class="list-head">
+      <h2 id="count-title">
+        {filtered ? `${found.length} of ${all.length} events` : `${all.length} ${all.length === 1 ? 'event' : 'events'}`}
+      </h2>
+      {found.length > 0 && <p>Sorted A to Z</p>}
+    </div>
+    {
+      found.length === 0 ? (
+        <div class="empty">
+          {all.length === 0 ? (
+            <p>Events show up here once the editors add them.</p>
+          ) : (
+            <>
+              <p>No events match these filters. Try fewer words, or another day or tribu.</p>
+              <a class="btn btn-secondary" href={base}>
+                Clear filters
+              </a>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <EventsTable rows={shown} tribus={sf.tribus} year={sf.year} showWhen />
+          <Pagination page={page} pages={pages} href={(p) => href({ page: p })} />
+        </>
+      )
+    }
+  </section>
+</Site>
+
+<script>
+  import '../../../scripts/autosubmit';
+</script>
+
+<style>
+  .search {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .search :global(.search-field) {
+    border-color: var(--ink);
+  }
+  .filters {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .states {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .states .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  .selects {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  select {
+    width: 100%;
+    padding: 11px 36px 11px 12px;
+    border: 1px solid var(--grey-300);
+    border-radius: 0;
+    background: var(--white)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%230A0A0A' stroke-width='1.5'/%3E%3C/svg%3E")
+      no-repeat right 12px center;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    appearance: none;
+    cursor: pointer;
+  }
+  select:hover {
+    border-color: var(--ink);
+  }
+  .list {
+    padding-block: 48px 72px;
+  }
+  .list-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding-bottom: 12px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 28px;
+    letter-spacing: -0.03em;
+  }
+  .list-head p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding-block: 24px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .empty p {
+    margin: 0;
+    color: var(--grey-600);
+  }
+  .list :global(.pagination) {
+    margin-top: 24px;
+  }
+  @media (min-width: 1024px) {
+    .filters {
+      flex-direction: row;
+      justify-content: space-between;
+    }
+    .selects {
+      grid-template-columns: repeat(2, 180px);
+    }
+    .list {
+      padding-block: 64px 96px;
+    }
+  }
+</style>
