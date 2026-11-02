@@ -1,0 +1,67 @@
+---
+import { parsePage } from '../../core/paging';
+import { db } from '../../db/client';
+import { listActivity, listEditors } from '../../db/queries/admin/access';
+import Admin from '../../layouts/Admin.astro';
+import { formatStamp } from '../../lib/format';
+
+const editorsList = await listEditors(db);
+const editorId = Number(Astro.url.searchParams.get('editor')) || null;
+const page = parsePage(Astro.url.searchParams.get('page')) ?? 1;
+const { rows, pages } = await listActivity(db, { editorId, page, perPage: 50 });
+const LINK: Record<string, (id: number) => string> = {
+  story: (id) => `/admin/stories/${id}`,
+  media: (id) => `/admin/media/${id}`,
+  person: (id) => `/admin/people/${id}`,
+  issue: (id) => `/admin/print/${id}`,
+  section: (id) => `/admin/sections/${id}`,
+  sumat: (id) => `/admin/sumat/${id}`,
+};
+const href = (p: number) =>
+  `/admin/activity?${new URLSearchParams({ ...(editorId ? { editor: String(editorId) } : {}), ...(p > 1 ? { page: String(p) } : {}) })}`;
+---
+
+<Admin title="Activity" section="activity">
+  <form class="toolbar" method="get">
+    <div class="field narrow">
+      <label for="f-editor">Editor</label>
+      <select id="f-editor" name="editor" data-autosubmit>
+        <option value="">Everyone</option>
+        {editorsList.map((e) => <option value={e.id} selected={e.id === editorId}>{e.name}</option>)}
+      </select>
+    </div>
+    <noscript><button class="btn btn-secondary" type="submit">Show</button></noscript>
+  </form>
+  {
+    rows.length === 0 ? (
+      <div class="empty-state"><h2>No activity yet</h2><p>Every change made in the admin is listed here, with who made it.</p></div>
+    ) : (
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th scope="col">What changed</th><th scope="col">Who</th><th scope="col" class="hide-sm">When</th></tr></thead>
+          <tbody>
+            {rows.map((r) => {
+              const to = r.entityId && LINK[r.entityType] ? LINK[r.entityType](r.entityId) : null;
+              return (
+                <tr>
+                  <td>{to ? <a href={to}>{r.summary}</a> : r.summary}</td>
+                  <td class="muted small">{r.editor ?? 'A removed editor'}</td>
+                  <td class="muted small hide-sm">{formatStamp(r.at)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+  {
+    pages > 1 && (
+      <nav class="pager" aria-label="Pages">
+        {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Newer</a> : <span />}
+        <span class="muted small">Page {page} of {pages}</span>
+        {page < pages ? <a class="btn btn-secondary" href={href(page + 1)}>Older</a> : <span />}
+      </nav>
+    )
+  }
+</Admin>
