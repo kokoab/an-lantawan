@@ -1,10 +1,11 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, like, sql } from 'drizzle-orm';
+import { slugify } from '../../../core/slug';
 import type { Db } from '../../client';
 import { issues, media } from '../../schema';
 
 export type IssueInput = Pick<
   typeof issues.$inferInsert,
-  'kind' | 'title' | 'slug' | 'description' | 'publishedOn' | 'pdfId' | 'coverId'
+  'kind' | 'title' | 'slug' | 'description' | 'publishedOn' | 'pages' | 'pdfId' | 'coverId'
 >;
 
 /** Every print issue, archived ones too, newest first. */
@@ -47,4 +48,21 @@ export async function setIssueArchived(db: Db, id: number, archived: boolean) {
     .update(issues)
     .set({ archivedAt: archived ? sql`(unixepoch())` : null })
     .where(eq(issues.id, id));
+}
+
+/** A URL name for a new issue: its title, with a number added if it's taken. */
+export async function freeIssueSlug(db: Db, title: string) {
+  const base = slugify(title) || 'issue';
+  const rows = await db
+    .select({ slug: issues.slug })
+    .from(issues)
+    .where(like(issues.slug, `${base}%`));
+  const taken = new Set(rows.map((r) => r.slug));
+  let slug = base;
+  for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+  return slug;
+}
+
+export async function deleteIssue(db: Db, id: number) {
+  await db.delete(issues).where(eq(issues.id, id));
 }

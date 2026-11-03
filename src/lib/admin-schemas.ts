@@ -91,12 +91,28 @@ export const staffTermForm = z.object({
   sort: wholeNumber(0, 999),
 });
 
-export const issueForm = z.object({
+/** A print issue on the Print issues page. The month is a select of year and month. */
+export const printIssueForm = z.object({
   title: text(160, 'Give the issue a title.'),
-  slug,
   kind: z.enum(ISSUE_KINDS, { message: 'Choose newsletter or special publication.' }),
   description: optionalText(600),
-  publishedOn: date,
+  month: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Choose the month it came out.'),
+  pages: z
+    .string()
+    .trim()
+    .transform((v, ctx) => {
+      if (v === '') return null;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 2000) {
+        ctx.addIssue({ code: 'custom', message: 'Use a number of pages, like 32.' });
+        return z.NEVER;
+      }
+      return n;
+    }),
+  pdfId: optionalId,
 });
 
 const names = z.array(z.string().trim().max(80)).max(12);
