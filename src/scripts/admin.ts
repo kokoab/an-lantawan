@@ -26,6 +26,17 @@ document.addEventListener('click', (event) => {
   }
 });
 
+// Dialogs open and close from buttons that name them.
+for (const button of document.querySelectorAll<HTMLElement>('[data-open-dialog]')) {
+  button.addEventListener('click', () => {
+    const dialog = document.getElementById(button.dataset.openDialog ?? '');
+    if (dialog instanceof HTMLDialogElement) dialog.showModal();
+  });
+}
+for (const button of document.querySelectorAll<HTMLElement>('[data-close-dialog]')) {
+  button.addEventListener('click', () => button.closest('dialog')?.close());
+}
+
 // Filter menus apply as soon as a choice is made.
 for (const el of document.querySelectorAll<HTMLElement>('[data-autosubmit]')) {
   if (el instanceof HTMLSelectElement) {

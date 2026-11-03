@@ -1,4 +1,4 @@
-/** The Sumat inbox: selecting several letters, the publish dialog and keyboard shortcuts. */
+/** The Sumat inbox: selecting several letters, saving notes and keyboard shortcuts. */
 const inbox = document.getElementById('inbox');
 const bulk = document.querySelector<HTMLElement>('[data-bulk]');
 const count = document.querySelector<HTMLElement>('[data-bulk-count]');
@@ -17,17 +17,6 @@ document.querySelector('[data-bulk-clear]')?.addEventListener('click', () => {
   inbox?.classList.remove('show-picks');
   updateBulk();
 });
-
-// Dialogs open and close from buttons that name them.
-for (const button of document.querySelectorAll<HTMLElement>('[data-open-dialog]')) {
-  button.addEventListener('click', () => {
-    const dialog = document.getElementById(button.dataset.openDialog ?? '');
-    if (dialog instanceof HTMLDialogElement) dialog.showModal();
-  });
-}
-for (const button of document.querySelectorAll<HTMLElement>('[data-close-dialog]')) {
-  button.addEventListener('click', () => button.closest('dialog')?.close());
-}
 
 // The open/closed switch saves as soon as it's flipped, with the prompt as typed.
 for (const el of document.querySelectorAll<HTMLElement>('[data-autosubmit-check]')) {
