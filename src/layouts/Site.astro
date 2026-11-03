@@ -11,13 +11,14 @@ import '../styles/site.css';
 
 interface Props {
   title: string;
+  shareTitle?: string | null;
   description?: string;
   image?: string;
   /** Section slug of the page, to mark it in the header. */
   current?: string;
 }
 
-const { title, description, image, current } = Astro.props;
+const { title, shareTitle, description, image, current } = Astro.props;
 const [nav, sportsfest, settings] = await Promise.all([
   getNavigation(db),
   getCurrentSportsfest(db),
@@ -36,7 +37,7 @@ const siteName = settings['site.name'];
 const pageTitle = title === siteName ? title : `${title} · ${siteName}`;
 ---
 
-<Base title={pageTitle} description={description ?? settings['site.description']} image={image}>
+<Base title={pageTitle} shareTitle={shareTitle} description={description ?? settings['site.description']} image={image}>
   <a class="skip-link" href="#main">Skip to content</a>
   <SiteHeader
     nav={nav}

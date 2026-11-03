@@ -2,12 +2,14 @@
 /** Document shell shared by every public page: language, SEO and social tags. */
 interface Props {
   title: string;
+  /** What Facebook and Messenger show as the title, if it should differ from the page title. */
+  shareTitle?: string | null;
   description: string;
   /** Path of a social share image, relative to the site. */
   image?: string;
   themeColor?: string;
 }
-const { title, description, image, themeColor = '#FFFFFF' } = Astro.props;
+const { title, shareTitle, description, image, themeColor = '#FFFFFF' } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 
@@ -21,7 +23,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <link rel="canonical" href={canonical} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="An Lantawan" />
-    <meta property="og:title" content={title} />
+    <meta property="og:title" content={shareTitle || title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     {image && <meta property="og:image" content={new URL(image, Astro.site)} />}

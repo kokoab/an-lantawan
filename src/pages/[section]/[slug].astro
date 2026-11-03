@@ -55,11 +55,11 @@ const minutes = readingMinutes(story.body);
 const url = new URL(Astro.url.pathname, Astro.site).toString();
 const label = isOpinion && story.kind === 'opinion' ? 'Opinion' : storyLabel(story);
 const coverCaption = [story.cover?.caption, story.cover?.creditText].filter(Boolean).join(' ');
-const description = story.dek ?? undefined;
+const description = story.shareSummary ?? story.dek ?? undefined;
 const image = story.cover ? mediaUrl(story.cover.key) : undefined;
 ---
 
-<Site title={story.title} description={description} image={image} current={parentSlug}>
+<Site title={story.title} shareTitle={story.shareTitle} description={description} image={image} current={parentSlug}>
   <article>
     {
       opinionHead ? (
