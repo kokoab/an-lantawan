@@ -45,7 +45,7 @@ const photo = writerPhoto ? credits.find((c) => c.role === 'writer' && c.photoKe
             {g.people.map((p, i) => (
               <>
                 {i > 0 && (i === g.people.length - 1 ? ' and ' : ', ')}
-                <a href={`/people/${p.slug}`}>{p.name}</a>
+                {p.hasProfile ? <a href={`/people/${p.slug}`}>{p.name}</a> : p.name}
               </>
             ))}
           </dd>

@@ -9,6 +9,7 @@ export type Credit = {
   slug: string;
   role: 'writer' | 'photographer' | 'artist' | 'editor';
   photoKey: string | null;
+  hasProfile: boolean;
 };
 
 /** A published story with everything its page shows, or null. */
@@ -40,6 +41,7 @@ export async function getStoryPage(db: Db, slug: string) {
       .select({
         name: people.name,
         slug: people.slug,
+        hasProfile: people.hasProfile,
         role: storyAuthors.role,
         photoKey: media.key,
       })
