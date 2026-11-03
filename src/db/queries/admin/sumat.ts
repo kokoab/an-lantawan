@@ -1,5 +1,5 @@
-import { and, count, desc, eq, sql } from 'drizzle-orm';
-import { emptyDoc } from '../../../core/content/doc';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { type Doc, emptyDoc } from '../../../core/content/doc';
 import { runBatch } from '../../batch';
 import type { Db } from '../../client';
 import { sections, stories, sumatMessages, sumatPrompts } from '../../schema';
@@ -56,11 +56,50 @@ export async function setMessageNotes(db: Db, id: number, notes: string | null) 
   await db.update(sumatMessages).set({ notes }).where(eq(sumatMessages.id, id));
 }
 
+/** Sets the status of several messages at once. */
+export async function setStatuses(db: Db, ids: number[], status: MessageStatus) {
+  if (ids.length)
+    await db.update(sumatMessages).set({ status }).where(inArray(sumatMessages.id, ids));
+}
+
+/** The statuses of messages before a change, for undo. */
+export async function statusesOf(db: Db, ids: number[]) {
+  if (!ids.length) return [];
+  return db
+    .select({ id: sumatMessages.id, status: sumatMessages.status })
+    .from(sumatMessages)
+    .where(inArray(sumatMessages.id, ids));
+}
+
+/** Opens Sumat again with the newest prompt, or with a new one. */
+export async function openSumat(db: Db, text: string) {
+  const [latest] = await db
+    .select()
+    .from(sumatPrompts)
+    .orderBy(desc(sumatPrompts.opensAt), desc(sumatPrompts.id))
+    .limit(1);
+  if (latest && latest.text === text) {
+    await db
+      .update(sumatPrompts)
+      .set({ closesAt: null, opensAt: sql`min(${sumatPrompts.opensAt}, unixepoch())` })
+      .where(eq(sumatPrompts.id, latest.id));
+  } else {
+    await createPrompt(db, { text, opensAt: new Date(), closesAt: null });
+  }
+}
+
 /** Publishes a message as a letter: a story of kind "letter" linked back to the message. */
 export async function publishLetter(
   db: Db,
   message: { id: number },
-  letter: { text: string; signature: string; sectionId: number; slug: string; publishedAt: Date },
+  letter: {
+    text: string;
+    signature: string;
+    sectionId: number;
+    slug: string;
+    publishedAt: Date;
+    body?: Doc;
+  },
 ) {
   const [story] = await db
     .insert(stories)
@@ -71,7 +110,7 @@ export async function publishLetter(
       title: letter.text,
       slug: letter.slug,
       dek: letter.signature,
-      body: emptyDoc(),
+      body: letter.body ?? emptyDoc(),
       publishedAt: letter.publishedAt,
       sourceMessageId: message.id,
     })
