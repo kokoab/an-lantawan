@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initials, isYearStart, schoolYearOf } from './people';
+import { boardOrder, initials, isYearStart, positionRank, schoolYearOf } from './people';
 
 describe('initials', () => {
   it('matches the admin frames', () => {
@@ -28,5 +28,58 @@ describe('school years', () => {
     expect(isYearStart(new Date('2026-09-30T00:00:00Z'))).toBe(true);
     expect(isYearStart(new Date('2026-11-03T00:00:00Z'))).toBe(false);
     expect(isYearStart(new Date('2027-03-12T00:00:00Z'))).toBe(false);
+  });
+});
+
+describe('positionRank', () => {
+  it('puts the top editors in their usual order', () => {
+    expect(positionRank('Editor-in-chief')).toBe(1);
+    expect(positionRank('Editor in Chief')).toBe(1);
+    expect(positionRank('Editor–in–chief')).toBe(1);
+    expect(positionRank('Associate editor')).toBe(2);
+    expect(positionRank('Managing Editor')).toBe(3);
+  });
+
+  it('groups other editors, then directors, then staff', () => {
+    expect(positionRank('News editor')).toBe(4);
+    expect(positionRank('Creatives and Multimedia Director')).toBe(5);
+    expect(positionRank('Sports writer')).toBe(6);
+    expect(positionRank('Columnist, Margins')).toBe(6);
+  });
+
+  it('always lists advisers last, even ones with “editor” in the title', () => {
+    expect(positionRank('Adviser')).toBe(7);
+    expect(positionRank('Technical adviser')).toBe(7);
+    expect(positionRank('Editorial advisor')).toBe(7);
+  });
+});
+
+describe('boardOrder', () => {
+  it('orders by rank, then the given order, then name', () => {
+    const rows = [
+      { name: 'Ana', position: 'Adviser' },
+      { name: 'Mark', position: 'Sports writer' },
+      { name: 'Juan', position: 'Columnist' },
+      { name: 'Lea', position: 'Editor-in-chief' },
+      { name: 'Bea', position: 'News editor', sort: 2 },
+      { name: 'Cy', position: 'Features editor', sort: 1 },
+    ];
+    expect(boardOrder(rows).map((r) => r.name)).toEqual([
+      'Lea',
+      'Cy',
+      'Bea',
+      'Juan',
+      'Mark',
+      'Ana',
+    ]);
+  });
+
+  it('leaves the input alone', () => {
+    const rows = [
+      { name: 'B', position: 'Adviser' },
+      { name: 'A', position: 'Editor-in-chief' },
+    ];
+    boardOrder(rows);
+    expect(rows[0].name).toBe('B');
   });
 });
