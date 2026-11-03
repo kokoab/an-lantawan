@@ -11,6 +11,7 @@ export interface Issue {
   slug: string;
   description: string | null;
   publishedOn: string;
+  pages: number | null;
   pdfKey: string;
   pdfBytes: number;
   coverKey: string | null;
@@ -41,6 +42,7 @@ async function withFiles(db: Db, rows: IssueRow[]): Promise<Issue[]> {
         slug: r.slug,
         description: r.description,
         publishedOn: r.publishedOn,
+        pages: r.pages,
         pdfKey: pdf.key,
         pdfBytes: pdf.bytes,
         coverKey: r.coverId ? (byId.get(r.coverId)?.key ?? null) : null,

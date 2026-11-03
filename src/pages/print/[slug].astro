@@ -11,7 +11,7 @@ const pdf = mediaUrl(issue.pdfKey);
 const kindLabel = issue.kind === 'newsletter' ? 'Newsletter' : 'Special publication';
 const { title, description } = issue;
 const released = `${kindLabel}, ${formatMonth(issue.publishedOn)}`;
-const file = `PDF, ${formatBytes(issue.pdfBytes)}`;
+const file = `${issue.pages ? `${issue.pages} pages. ` : ''}PDF, ${formatBytes(issue.pdfBytes)}`;
 ---
 
 <Site title={title} description={description ?? released}>

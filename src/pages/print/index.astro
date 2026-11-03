@@ -83,6 +83,12 @@ const kindLabel = (k: IssueKind) => (k === 'newsletter' ? 'Newsletter' : 'Specia
               <dt>Released</dt>
               <dd>{formatMonth(latest.publishedOn)}</dd>
             </div>
+            {latest.pages && (
+              <div>
+                <dt>Pages</dt>
+                <dd>{latest.pages}</dd>
+              </div>
+            )}
             <div>
               <dt>File</dt>
               <dd>PDF, {formatBytes(latest.pdfBytes)}</dd>
