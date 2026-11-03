@@ -67,3 +67,35 @@ export function uploadKey(fileName: string, type: FileType, now: Date, random: s
   const month = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   return `uploads/${month}/${random}-${base}.${type.ext}`;
 }
+
+const CHUNK = 1 << 20;
+const OVERLAP = 512;
+const text = (b: Uint8Array) => {
+  let s = '';
+  for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192));
+  return s;
+};
+
+/**
+ * How many pages a PDF has, read from its page tree: the largest /Count on a /Pages node,
+ * or else the number of /Page objects. Null when the tree is compressed out of sight
+ * (newer PDFs can hide it in object streams); the editor types the number then. Reads a
+ * megabyte at a time so a 50 MB file is never one big string.
+ */
+export function pdfPageCount(bytes: Uint8Array): number | null {
+  let most = 0;
+  let pages = 0;
+  for (let start = 0; start < bytes.length; start += CHUNK) {
+    const chunk = text(bytes.subarray(start, Math.min(bytes.length, start + CHUNK + OVERLAP)));
+    // Only matches that start in this chunk count; the overlap is for ones cut at the edge.
+    const mine = (m: RegExpMatchArray) => (m.index ?? 0) < CHUNK;
+    for (const m of chunk.matchAll(
+      /\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)|\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g,
+    )) {
+      if (mine(m)) most = Math.max(most, Number(m[1] ?? m[2]));
+    }
+    for (const m of chunk.matchAll(/\/Type\s*\/Page(?![A-Za-z])/g)) if (mine(m)) pages++;
+  }
+  const n = most || pages;
+  return n > 0 && n < 10_000 ? n : null;
+}

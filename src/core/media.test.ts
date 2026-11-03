@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkUpload, sniff, uploadKey } from './media';
+import { checkUpload, pdfPageCount, sniff, uploadKey } from './media';
 
 const bytes = (...b: number[]) => new Uint8Array([...b, ...new Array(16).fill(0)]);
 const JPG = bytes(0xff, 0xd8, 0xff, 0xe0);
@@ -61,5 +61,47 @@ describe('uploadKey', () => {
       'r',
     );
     expect(key).toBe('uploads/2026/11/r-file.pdf');
+  });
+});
+
+describe('pdfPageCount', () => {
+  const pdf = (body: string) => new TextEncoder().encode(`%PDF-1.4\n${body}\n%%EOF`);
+  const page = (n: number) => `${n} 0 obj << /Type /Page /Parent 2 0 R >> endobj\n`;
+
+  it('reads the count on the page tree', () => {
+    expect(pdfPageCount(pdf('2 0 obj << /Type /Pages /Kids [3 0 R] /Count 32 >> endobj'))).toBe(32);
+    expect(pdfPageCount(pdf('2 0 obj <</Count 12/Kids[3 0 R]/Type/Pages>> endobj'))).toBe(12);
+  });
+
+  it('uses the root count when the tree is nested', () => {
+    const body =
+      '1 0 obj << /Type /Pages /Count 40 /Kids [2 0 R 3 0 R] >> endobj 2 0 obj << /Type /Pages /Count 16 /Parent 1 0 R >> endobj';
+    expect(pdfPageCount(pdf(body))).toBe(40);
+  });
+
+  it('ignores outline counts', () => {
+    const body = `4 0 obj << /Type /Outlines /Count 99 >> endobj ${page(5)}${page(6)}`;
+    expect(pdfPageCount(pdf(body))).toBe(2);
+  });
+
+  it('counts page objects when there is no tree count', () => {
+    expect(pdfPageCount(pdf([1, 2, 3].map(page).join('')))).toBe(3);
+  });
+
+  it('gives up on a tree it cannot see', () => {
+    expect(pdfPageCount(pdf('1 0 obj << /Type /ObjStm /N 40 >> stream ... endstream'))).toBeNull();
+  });
+
+  it('counts pages across the megabyte boundaries once each', () => {
+    const filler = ' '.repeat(1024 * 1024 - 30);
+    const body = `${page(1)}${filler}${page(2)}${filler}${page(3)}`;
+    expect(pdfPageCount(pdf(body))).toBe(3);
+  });
+
+  it('finds a page object cut in half by a chunk edge', () => {
+    const head = '%PDF-1.4\n';
+    const before = ' '.repeat(1024 * 1024 - head.length - 5);
+    const bytes = new TextEncoder().encode(`${head}${before}/Type /Page /Parent 2 0 R`);
+    expect(pdfPageCount(bytes)).toBe(1);
   });
 });
