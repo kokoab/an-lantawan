@@ -1,7 +1,7 @@
-import { asc, count, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, isNull, ne, sql } from 'drizzle-orm';
 import { runBatch } from '../../batch';
 import type { Db } from '../../client';
-import { activityLog, editors, redirects, sessions } from '../../schema';
+import { activityLog, editors, people, redirects, sessions } from '../../schema';
 
 /* Editors */
 
@@ -43,9 +43,20 @@ export async function renameEditor(db: Db, id: number, name: string) {
 
 export async function listActivity(
   db: Db,
-  { editorId, page, perPage }: { editorId: number | null; page: number; perPage: number },
+  f: {
+    personId: number | null;
+    area: string | null;
+    since: Date | null;
+    page: number;
+    perPage: number;
+  },
 ) {
-  const where = editorId ? eq(activityLog.editorId, editorId) : undefined;
+  const where = and(
+    f.personId ? eq(activityLog.personId, f.personId) : undefined,
+    f.area ? eq(activityLog.area, f.area) : undefined,
+    f.since ? gte(activityLog.at, f.since) : undefined,
+    ne(activityLog.action, 'signed_in'),
+  );
   const [[{ total }], rows] = await Promise.all([
     db.select({ total: count() }).from(activityLog).where(where),
     db
@@ -53,18 +64,41 @@ export async function listActivity(
         id: activityLog.id,
         summary: activityLog.summary,
         at: activityLog.at,
-        editor: editors.name,
+        area: activityLog.area,
+        undo: activityLog.undo,
+        person: people.name,
+        account: editors.name,
         entityType: activityLog.entityType,
         entityId: activityLog.entityId,
       })
       .from(activityLog)
+      .leftJoin(people, eq(people.id, activityLog.personId))
       .leftJoin(editors, eq(editors.id, activityLog.editorId))
       .where(where)
       .orderBy(desc(activityLog.at), desc(activityLog.id))
-      .limit(perPage)
-      .offset((page - 1) * perPage),
+      .limit(f.perPage)
+      .offset((f.page - 1) * f.perPage),
   ]);
-  return { rows, pages: Math.max(1, Math.ceil(total / perPage)) };
+  return { rows, pages: Math.max(1, Math.ceil(total / f.perPage)) };
+}
+
+export async function getActivity(db: Db, id: number) {
+  const [row] = await db.select().from(activityLog).where(eq(activityLog.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** A change can be undone once. */
+export async function clearUndo(db: Db, id: number) {
+  await db.update(activityLog).set({ undo: null }).where(eq(activityLog.id, id));
+}
+
+/** Everyone who appears on the activity log, for its filter. */
+export async function listActivityPeople(db: Db) {
+  return db
+    .selectDistinct({ id: people.id, name: people.name })
+    .from(activityLog)
+    .innerJoin(people, eq(people.id, activityLog.personId))
+    .orderBy(asc(people.name));
 }
 
 /* Redirects */

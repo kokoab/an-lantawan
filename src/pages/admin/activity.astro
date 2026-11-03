@@ -1,52 +1,137 @@
 ---
 import { parsePage } from '../../core/paging';
+import { initials } from '../../core/people';
+import { formatWhen } from '../../core/when';
 import { db } from '../../db/client';
-import { listActivity, listEditors } from '../../db/queries/admin/access';
+import {
+  clearUndo,
+  getActivity,
+  listActivity,
+  listActivityPeople,
+} from '../../db/queries/admin/access';
 import Admin from '../../layouts/Admin.astro';
-import { formatStamp } from '../../lib/format';
+import { AREAS, doneRedirect, editorOf, one, readForm, record } from '../../lib/admin';
+import { applyUndo, UNDO_DAYS, type Undo } from '../../lib/undo';
 
-const editorsList = await listEditors(db);
-const editorId = Number(Astro.url.searchParams.get('editor')) || null;
-const page = parsePage(Astro.url.searchParams.get('page')) ?? 1;
-const { rows, pages } = await listActivity(db, { editorId, page, perPage: 50 });
-const LINK: Record<string, (id: number) => string> = {
-  story: (id) => `/admin/stories/${id}`,
-  media: (id) => `/admin/media/${id}`,
-  person: (id) => `/admin/staff/${id}`,
-  issue: (id) => `/admin/print/${id}`,
-  section: (id) => `/admin/sections/${id}`,
-  sumat: (id) => `/admin/sumat/${id}`,
+const editor = editorOf(Astro);
+const now = new Date();
+let problem: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const row = await getActivity(db, Number(one(form, 'activityId')));
+  const tooOld = row && now.getTime() - row.at.getTime() > UNDO_DAYS * 86_400_000;
+  if (!row || !row.undo) problem = 'That change can’t be undone, or was undone already.';
+  else if (tooOld) problem = `Changes can only be undone for ${UNDO_DAYS} days.`;
+  else {
+    try {
+      await applyUndo(db, row.undo as Undo, editor.id);
+      await clearUndo(db, row.id);
+      await record(editor, {
+        action: 'restore',
+        entityType: row.entityType,
+        entityId: row.entityId,
+        area: row.area,
+        summary: `Undid: ${row.summary}`,
+      });
+      return doneRedirect(Astro, `/admin/activity${Astro.url.search}`, 'restored');
+    } catch (e) {
+      problem = e instanceof Error ? e.message : 'That change couldn’t be undone.';
+    }
+  }
+  Astro.response.status = 422;
+}
+
+const params = Astro.url.searchParams;
+const PERIODS = [
+  { value: '7', label: 'Last 7 days', days: 7 },
+  { value: '30', label: 'Last 30 days', days: 30 },
+  { value: 'all', label: 'Any time', days: null },
+];
+const period = PERIODS.find((p) => p.value === params.get('period')) ?? PERIODS[0];
+const area = AREAS.find((a) => a === params.get('area')) ?? null;
+const personId = Number(params.get('who')) || null;
+const page = parsePage(params.get('page')) ?? 1;
+const since = period.days ? new Date(now.getTime() - period.days * 86_400_000) : null;
+const [{ rows, pages }, people] = await Promise.all([
+  listActivity(db, { personId, area, since, page, perPage: 50 }),
+  listActivityPeople(db),
+]);
+const href = (p: number) => {
+  const u = new URLSearchParams(params);
+  if (p > 1) u.set('page', String(p));
+  else u.delete('page');
+  return `/admin/activity${u.size ? `?${u}` : ''}`;
 };
-const href = (p: number) =>
-  `/admin/activity?${new URLSearchParams({ ...(editorId ? { editor: String(editorId) } : {}), ...(p > 1 ? { page: String(p) } : {}) })}`;
+const canUndo = (r: (typeof rows)[number]) =>
+  r.undo && now.getTime() - r.at.getTime() <= UNDO_DAYS * 86_400_000;
 ---
 
-<Admin title="Activity" section="overview">
-  <form class="toolbar" method="get">
-    <div class="field narrow">
-      <label for="f-editor">Editor</label>
-      <select id="f-editor" name="editor" data-autosubmit>
+<Admin title="Activity" section="overview" subtitle="Every change in the admin, newest first. Restore undoes a change." back={{ label: 'Overview', href: '/admin' }}>
+  {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
+  <form class="filters" method="get">
+    <label>
+      <span class="visually-hidden">Who</span>
+      <select name="who" data-autosubmit>
         <option value="">Everyone</option>
-        {editorsList.map((e) => <option value={e.id} selected={e.id === editorId}>{e.name}</option>)}
+        {people.map((p) => <option value={p.id} selected={p.id === personId}>{p.name}</option>)}
       </select>
-    </div>
+    </label>
+    <label>
+      <span class="visually-hidden">Area</span>
+      <select name="area" data-autosubmit>
+        <option value="">All areas</option>
+        {AREAS.map((a) => <option value={a} selected={a === area}>{a}</option>)}
+      </select>
+    </label>
+    <label>
+      <span class="visually-hidden">When</span>
+      <select name="period" data-autosubmit>
+        {PERIODS.map((p) => <option value={p.value} selected={p.value === period.value}>{p.label}</option>)}
+      </select>
+    </label>
     <noscript><button class="btn btn-secondary" type="submit">Show</button></noscript>
   </form>
   {
     rows.length === 0 ? (
-      <div class="empty-state"><h2>No activity yet</h2><p>Every change made in the admin is listed here, with who made it.</p></div>
+      <div class="empty-state">
+        <h2>No changes here</h2>
+        <p>Try another person, area or time. Every change in the admin is listed, with who made it.</p>
+      </div>
     ) : (
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th scope="col">What changed</th><th scope="col">Who</th><th scope="col" class="hide-sm">When</th></tr></thead>
+          <thead>
+            <tr>
+              <th scope="col">Who</th>
+              <th scope="col">What changed</th>
+              <th scope="col" class="hide-sm">Area</th>
+              <th scope="col" class="hide-sm">When</th>
+              <th scope="col"><span class="visually-hidden">Undo</span></th>
+            </tr>
+          </thead>
           <tbody>
             {rows.map((r) => {
-              const to = r.entityId && LINK[r.entityType] ? LINK[r.entityType](r.entityId) : null;
+              const name = r.person ?? r.account ?? 'Someone';
               return (
                 <tr>
-                  <td>{to ? <a href={to}>{r.summary}</a> : r.summary}</td>
-                  <td class="muted small">{r.editor ?? 'A removed editor'}</td>
-                  <td class="muted small hide-sm">{formatStamp(r.at)}</td>
+                  <th scope="row" class="who">
+                    <span class="initials" aria-hidden="true">{initials(name)}</span>
+                    {name}
+                  </th>
+                  <td>{r.summary}</td>
+                  <td class="muted hide-sm">{r.area ?? ''}</td>
+                  <td class="muted hide-sm nowrap">{formatWhen(r.at, now)}</td>
+                  <td class="actions">
+                    {canUndo(r) && (
+                      <form method="post">
+                        <input type="hidden" name="activityId" value={r.id} />
+                        <button class="link-button" type="submit" data-confirm="Undo this change?">
+                          Restore
+                        </button>
+                      </form>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -55,13 +140,37 @@ const href = (p: number) =>
       </div>
     )
   }
+  <p class="muted small">Changes can be undone for {UNDO_DAYS} days. Archived items can be brought back the same way.</p>
   {
     pages > 1 && (
       <nav class="pager" aria-label="Pages">
         {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Newer</a> : <span />}
-        <span class="muted small">Page {page} of {pages}</span>
+        <span class="small">Page {page} of {pages}</span>
         {page < pages ? <a class="btn btn-secondary" href={href(page + 1)}>Older</a> : <span />}
       </nav>
     )
   }
 </Admin>
+
+<style>
+  .filters {
+    display: grid;
+    gap: 8px;
+  }
+  .who {
+    white-space: nowrap;
+  }
+  .nowrap {
+    white-space: nowrap;
+  }
+  @media (min-width: 768px) {
+    .filters {
+      grid-template-columns: repeat(3, 166px);
+    }
+    .filters select {
+      min-height: 40px;
+      padding-block: 9px;
+      font-size: 14px;
+    }
+  }
+</style>
