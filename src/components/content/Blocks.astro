@@ -2,6 +2,7 @@
 /** Renders story blocks. Only these elements are ever produced; stored text is always escaped. */
 import type { Block, Embed } from '../../core/content/doc';
 import { mediaUrl } from '../../lib/urls';
+import ChartBlock from './ChartBlock.astro';
 import Inlines from './Inlines.astro';
 
 interface Props {
@@ -83,6 +84,22 @@ function embedSrc(e: Embed): string | null {
       }
       case 'horizontalRule':
         return <hr />;
+      case 'infoBox':
+        return (
+          <aside class="info-box">
+            {b.attrs.title && <p class="info-title">{b.attrs.title}</p>}
+            <dl>
+              {b.attrs.rows.map((r) => (
+                <div>
+                  <dt>{r.label}</dt>
+                  <dd>{r.text}</dd>
+                </div>
+              ))}
+            </dl>
+          </aside>
+        );
+      case 'chart':
+        return <ChartBlock chart={b} />;
       default:
         return null;
     }

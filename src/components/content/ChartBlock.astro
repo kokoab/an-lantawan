@@ -1,0 +1,143 @@
+---
+/** A chart in a story: bars, a line or a table, drawn from its rows. Highlighted rows are yellow. */
+import { barShares, chartNumber, linePoints } from '../../core/content/chart';
+import type { Chart } from '../../core/content/doc';
+
+interface Props {
+  chart: Chart;
+}
+const { title, kind, rows, source } = Astro.props.chart.attrs;
+const shares = barShares(rows);
+const W = 600;
+const H = 220;
+const points = linePoints(rows, W, H, 16);
+---
+
+<figure class="chart">
+  {title && <figcaption class="chart-title">{title}</figcaption>}
+  {
+    kind === 'bars' && (
+      <ul class="bars">
+        {rows.map((r, i) => (
+          <li>
+            <span class="row-label">{r.label}</span>
+            <span class="row-value">{chartNumber(r.value)}</span>
+            <svg class="bar" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+              <rect x="0" y="0" width={shares[i]} height="10" fill={r.highlight ? '#FFD400' : '#0A0A0A'} stroke={r.highlight ? '#0A0A0A' : 'none'} vector-effect="non-scaling-stroke" />
+            </svg>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  {
+    kind === 'line' && (
+      <>
+        <svg class="line" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title || 'Line chart'}>
+          <polyline points={points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#0A0A0A" stroke-width="2" vector-effect="non-scaling-stroke" />
+          {points.map((p, i) => (
+            <rect x={p.x - 5} y={p.y - 5} width="10" height="10" fill={rows[i].highlight ? '#FFD400' : '#0A0A0A'} stroke="#0A0A0A" />
+          ))}
+        </svg>
+        <ol class="line-labels">
+          {rows.map((r) => (
+            <li>
+              <span>{r.label}</span> <strong>{chartNumber(r.value)}</strong>
+            </li>
+          ))}
+        </ol>
+      </>
+    )
+  }
+  {
+    kind === 'table' && (
+      <table>
+        <tbody>
+          {rows.map((r) => (
+            <tr class:list={{ highlight: r.highlight }}>
+              <th scope="row">{r.label}</th>
+              <td>{chartNumber(r.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+  {source && <p class="source">Source: {source}</p>}
+</figure>
+
+<style>
+  .chart {
+    margin: 32px 0;
+    padding: 20px;
+    border: 1px solid var(--grey-300);
+  }
+  .chart-title {
+    margin-bottom: 16px;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 22px;
+  }
+  .bars {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .bars li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    font-size: 14px;
+    line-height: 18px;
+  }
+  .row-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 16px;
+  }
+  .line {
+    width: 100%;
+    height: auto;
+  }
+  .line-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 14px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  th,
+  td {
+    padding: 8px 0;
+    border-top: 1px solid var(--grey-300);
+    text-align: left;
+  }
+  td {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .highlight th,
+  .highlight td {
+    background: #fff4b8;
+  }
+  .source {
+    margin: 16px 0 0;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--grey-600);
+  }
+</style>

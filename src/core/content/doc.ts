@@ -69,6 +69,23 @@ export interface HorizontalRule {
   type: 'horizontalRule';
 }
 
+/** A boxed list of short facts beside the story: “What the law says”. */
+export interface InfoBox {
+  type: 'infoBox';
+  attrs: { title: string; rows: Array<{ label: string; text: string }> };
+}
+
+/** A small chart drawn by the site from typed numbers. Highlighted rows use the yellow fill. */
+export interface Chart {
+  type: 'chart';
+  attrs: {
+    title: string;
+    kind: 'bars' | 'line' | 'table';
+    rows: Array<{ label: string; value: number; highlight: boolean }>;
+    source: string;
+  };
+}
+
 export type Block =
   | Paragraph
   | Heading
@@ -77,7 +94,9 @@ export type Block =
   | OrderedList
   | Image
   | Embed
-  | HorizontalRule;
+  | HorizontalRule
+  | InfoBox
+  | Chart;
 
 export interface Doc {
   type: 'doc';

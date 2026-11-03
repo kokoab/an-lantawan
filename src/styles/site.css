@@ -302,3 +302,40 @@ select {
   background-position: var(--grid-x) 0;
   color: var(--white);
 }
+
+/* An info box inside a story: a titled list of short facts. */
+.info-box {
+  margin: 32px 0;
+  padding: 20px;
+  border: 1px solid var(--ink);
+  background: var(--grey-50);
+}
+.info-box .info-title {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 22px;
+}
+.info-box dl {
+  margin: 0;
+}
+.info-box dl > div {
+  display: grid;
+  gap: 4px;
+  padding-block: 10px;
+  border-top: 1px solid var(--grey-300);
+}
+.info-box dt {
+  font-weight: 600;
+}
+.info-box dd {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+}
+@media (min-width: 768px) {
+  .info-box dl > div {
+    grid-template-columns: 140px 1fr;
+    gap: 16px;
+  }
+}

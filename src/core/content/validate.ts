@@ -139,6 +139,45 @@ function blocks(raw: unknown, depth = 0): Block[] {
       case 'horizontalRule':
         out.push({ type: 'horizontalRule' });
         break;
+      case 'infoBox': {
+        const a = isObj(n.attrs) ? n.attrs : {};
+        const rows = list(a.rows)
+          .filter(isObj)
+          .map((r) => ({ label: str(r.label, 80).trim(), text: str(r.text, 600).trim() }))
+          .filter((r) => r.label || r.text)
+          .slice(0, 20);
+        const title = str(a.title, 120).trim();
+        if (title || rows.length) out.push({ type: 'infoBox', attrs: { title, rows } });
+        break;
+      }
+      case 'chart': {
+        const a = isObj(n.attrs) ? n.attrs : {};
+        const kind = a.kind === 'line' || a.kind === 'table' ? a.kind : 'bars';
+        const rows = list(a.rows)
+          .filter(isObj)
+          .map((r) => ({
+            label: str(r.label, 60).trim(),
+            value:
+              typeof r.value === 'number'
+                ? r.value
+                : Number(String(r.value ?? '').replace(/,/g, '')),
+            highlight: r.highlight === true,
+          }))
+          .filter((r) => r.label && Number.isFinite(r.value))
+          .slice(0, 24);
+        if (rows.length) {
+          out.push({
+            type: 'chart',
+            attrs: {
+              title: str(a.title, 120).trim(),
+              kind,
+              rows,
+              source: str(a.source, 300).trim(),
+            },
+          });
+        }
+        break;
+      }
     }
     if (out.length >= MAX_BLOCKS) break;
   }

@@ -93,6 +93,52 @@ describe('cleanDoc', () => {
     ]);
   });
 
+  it('keeps info boxes and charts, cleaning their rows', () => {
+    const r = cleanDoc(
+      doc(
+        {
+          type: 'infoBox',
+          attrs: {
+            title: ' What the law says ',
+            rows: [{ label: 'Section 6', text: 'Exempt.' }, { label: '', text: '' }, 'junk'],
+          },
+        },
+        {
+          type: 'chart',
+          attrs: {
+            title: 'Cases',
+            kind: 'pie',
+            rows: [
+              { label: '2017', value: '26,000', highlight: 'yes' },
+              { label: '2025', value: 5698, highlight: true },
+              { label: 'Bad', value: 'many' },
+            ],
+            source: 'JJWC',
+          },
+        },
+        { type: 'chart', attrs: { title: 'Empty', rows: [] } },
+      ),
+    );
+    expect(r?.content).toEqual([
+      {
+        type: 'infoBox',
+        attrs: { title: 'What the law says', rows: [{ label: 'Section 6', text: 'Exempt.' }] },
+      },
+      {
+        type: 'chart',
+        attrs: {
+          title: 'Cases',
+          kind: 'bars',
+          rows: [
+            { label: '2017', value: 26000, highlight: false },
+            { label: '2025', value: 5698, highlight: true },
+          ],
+          source: 'JJWC',
+        },
+      },
+    ]);
+  });
+
   it('stops nesting at a sane depth', () => {
     let node: unknown = p(t('deep'));
     for (let i = 0; i < 50; i++) node = { type: 'blockquote', content: [node] };
