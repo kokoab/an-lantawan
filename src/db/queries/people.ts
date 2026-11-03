@@ -1,8 +1,9 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
+import { boardOrder } from '../../core/people';
 import type { Db } from '../client';
 import { media, people, staffTerms } from '../schema';
 
-/** The newest school year's editorial board, in the order the editors set. */
+/** The newest school year's editorial board, in board order. */
 export async function getEditorialBoard(db: Db) {
   const [latest] = await db
     .select({ year: staffTerms.schoolYear })
@@ -15,17 +16,24 @@ export async function getEditorialBoard(db: Db) {
       name: people.name,
       slug: people.slug,
       position: staffTerms.position,
+      sort: staffTerms.sort,
+      hasProfile: people.hasProfile,
       photoKey: media.key,
     })
     .from(staffTerms)
     .innerJoin(people, eq(people.id, staffTerms.personId))
     .leftJoin(media, eq(media.id, people.photoId))
-    .where(and(eq(staffTerms.schoolYear, latest.year), isNull(people.archivedAt)))
-    .orderBy(staffTerms.sort);
-  return { year: latest.year, members };
+    .where(
+      and(
+        eq(staffTerms.schoolYear, latest.year),
+        eq(staffTerms.onBoard, true),
+        isNull(people.archivedAt),
+      ),
+    );
+  return { year: latest.year, members: boardOrder(members) };
 }
 
-/** A person's profile: who they are and every position they've held. */
+/** A person's profile: who they are and every position they've held. Null if they have none. */
 export async function getPerson(db: Db, slug: string) {
   const [person] = await db
     .select({
@@ -37,7 +45,7 @@ export async function getPerson(db: Db, slug: string) {
     })
     .from(people)
     .leftJoin(media, eq(media.id, people.photoId))
-    .where(eq(people.slug, slug))
+    .where(and(eq(people.slug, slug), eq(people.hasProfile, true)))
     .limit(1);
   if (!person) return null;
   const terms = await db

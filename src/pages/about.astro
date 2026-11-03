@@ -62,11 +62,19 @@ const year = board.year?.replace(/\s*[-–]\s*/, '⁠–⁠');
         <ul class="people">
           {board.members.map((m) => (
             <li>
-              <a href={`/people/${m.slug}`}>
-                <span class="portrait">{m.photoKey && <img src={mediaUrl(m.photoKey)} alt="" loading="lazy" />}</span>
-                <span class="name">{m.name}</span>
-                <span class="position">{m.position}</span>
-              </a>
+              {m.hasProfile ? (
+                <a class="member" href={`/people/${m.slug}`}>
+                  <span class="portrait">{m.photoKey && <img src={mediaUrl(m.photoKey)} alt="" loading="lazy" />}</span>
+                  <span class="name">{m.name}</span>
+                  <span class="position">{m.position}</span>
+                </a>
+              ) : (
+                <div class="member">
+                  <span class="portrait">{m.photoKey && <img src={mediaUrl(m.photoKey)} alt="" loading="lazy" />}</span>
+                  <span class="name">{m.name}</span>
+                  <span class="position">{m.position}</span>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -199,7 +207,7 @@ const year = board.year?.replace(/\s*[-–]\s*/, '⁠–⁠');
     padding: 0;
     list-style: none;
   }
-  .people a {
+  .member {
     display: flex;
     flex-direction: column;
   }
