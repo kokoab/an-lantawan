@@ -78,10 +78,44 @@ export const doneMessage = (url: URL) => {
 export const doneRedirect = (astro: Pick<AstroGlobal, 'redirect'>, path: string, code: DoneCode) =>
   astro.redirect(`${path}${path.includes('?') ? '&' : '?'}done=${code}`, 303);
 
+/** The Activity page's areas, one per menu entry. */
+export const AREAS = [
+  'Stories',
+  'Home',
+  'Sumat',
+  'Sportsfest',
+  'Print issues',
+  'Staff',
+  'Site settings',
+] as const;
+
+const AREA_OF: Record<string, (typeof AREAS)[number]> = {
+  story: 'Stories',
+  media: 'Stories',
+  home: 'Home',
+  sumat: 'Sumat',
+  sportsfest: 'Sportsfest',
+  event: 'Sportsfest',
+  tribu: 'Sportsfest',
+  issue: 'Print issues',
+  person: 'Staff',
+  board: 'Staff',
+  editor: 'Staff',
+  settings: 'Site settings',
+  section: 'Site settings',
+  menu: 'Site settings',
+  redirect: 'Site settings',
+};
+
 /** Records who changed what. Failing to log never blocks the change itself. */
 export async function record(editor: SignedInEditor, a: Omit<Activity, 'editorId' | 'personId'>) {
   try {
-    await logActivity(db, { ...a, editorId: editor.id, personId: editor.person?.id ?? null });
+    await logActivity(db, {
+      ...a,
+      area: a.area ?? AREA_OF[a.entityType] ?? null,
+      editorId: editor.id,
+      personId: editor.person?.id ?? null,
+    });
   } catch (e) {
     console.error('activity log failed', e);
   }
