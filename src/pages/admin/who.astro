@@ -1,0 +1,168 @@
+---
+import { safeNextPath } from '../../core/auth/google';
+import { initials } from '../../core/people';
+import { db } from '../../db/client';
+import { logActivity } from '../../db/queries/activity';
+import { chooseSessionPerson, listEditingPeople } from '../../db/queries/auth';
+/**
+ * Everyone signs in with the publication account, then picks their name here. The name goes
+ * on the activity log and on anything they change.
+ */
+import AdminAuth from '../../layouts/AdminAuth.astro';
+import { editorOf, one, readForm } from '../../lib/admin';
+import { SESSION_COOKIE, setSessionCookie } from '../../lib/auth-cookies';
+
+const editor = editorOf(Astro);
+const next = safeNextPath(Astro.url.searchParams.get('next'));
+const people = await listEditingPeople(db);
+let error: string | null = null;
+let chosen = editor.person?.id ?? null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const personId = Number(one(form, 'personId'));
+  const person = people.find((p) => p.id === personId);
+  const remember = one(form, 'remember') === 'on';
+  const token = Astro.cookies.get(SESSION_COOKIE)?.value;
+  if (!person) error = 'Pick your name from the list.';
+  else if (token) {
+    const expiresAt = await chooseSessionPerson(db, token, person.id, remember);
+    setSessionCookie(Astro.cookies, token, expiresAt, remember);
+    await logActivity(db, {
+      editorId: editor.id,
+      personId: person.id,
+      area: null,
+      action: 'signed_in',
+      entityType: 'person',
+      entityId: person.id,
+      summary: `${person.name} started editing`,
+    });
+    return Astro.redirect(next, 303);
+  }
+  chosen = Number.isInteger(personId) ? personId : chosen;
+  Astro.response.status = 422;
+}
+---
+
+<AdminAuth title="Who’s editing?" wide>
+  <h1>Who’s editing?</h1>
+  <p>Everyone signs in with the publication account, so pick your name. It goes on the activity log and on anything you change.</p>
+  {error && <p class="error" role="alert">{error}</p>}
+  <form class="who" method="post">
+    {
+      people.length === 0 ? (
+        <p>Nobody can edit yet. Ask the developer to mark someone as an editor in Staff.</p>
+      ) : (
+        <fieldset>
+          <legend class="visually-hidden">Your name</legend>
+          <div class="people">
+            {people.map((p) => (
+              <label class="person">
+                <input type="radio" name="personId" value={p.id} checked={p.id === chosen} required />
+                <span class="initials" aria-hidden="true">{initials(p.name)}</span>
+                <span class="text">
+                  <strong>{p.name}</strong>
+                  {p.position && <span>{p.position}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )
+    }
+    <label class="remember">
+      <input type="checkbox" name="remember" checked />
+      Remember me on this device for 30 days
+    </label>
+    <button class="btn btn-primary" type="submit">Continue</button>
+    <p class="small">Not on the list? Ask the editor-in-chief to add you in Staff.</p>
+  </form>
+</AdminAuth>
+
+<script>
+  import '../../scripts/who';
+</script>
+
+<style>
+  .who {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .people {
+    display: grid;
+    gap: 8px;
+  }
+  .person {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--grey-300);
+    cursor: pointer;
+  }
+  .person:hover {
+    border-color: var(--grey-600);
+  }
+  .person:has(input:checked) {
+    border: 2px solid var(--ink);
+    padding: 11px;
+  }
+  .person:has(input:focus-visible) {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .person input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .initials {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .text strong {
+    font-size: 15px;
+    line-height: 20px;
+  }
+  .text span {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--grey-600);
+  }
+  .remember {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .remember input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: #ffd400;
+  }
+  .who .small {
+    font-size: 14px;
+  }
+  @media (min-width: 640px) {
+    .people {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>

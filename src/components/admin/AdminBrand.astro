@@ -1,0 +1,47 @@
+---
+/** The torch, “An Lantawan” and “Admin” under it, as in the admin frames. */
+import Torch from '../Torch.astro';
+
+interface Props {
+  href?: string;
+}
+const { href } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+
+<Tag class="admin-brand" href={href}>
+  <span class="lockup">
+    <Torch />
+    <span class="name">An Lantawan</span>
+  </span>
+  <span class="label">Admin</span>
+</Tag>
+
+<style>
+  .admin-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lockup {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+  .lockup :global(svg) {
+    width: 22.5px;
+    height: 36px;
+  }
+  .name {
+    font-size: 23px;
+    font-weight: 600;
+    line-height: 27.6px;
+    letter-spacing: -0.03em;
+  }
+  .label {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 16px;
+    color: var(--grey-600);
+  }
+</style>
