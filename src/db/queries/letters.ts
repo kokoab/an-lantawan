@@ -35,6 +35,7 @@ export async function listLetters(
       sectionSlug: sections.slug,
       publishedAt: stories.publishedAt,
       prompt: sumatMessages.promptText,
+      body: stories.body,
     })
     .from(stories)
     .innerJoin(sections, eq(sections.id, stories.sectionId))

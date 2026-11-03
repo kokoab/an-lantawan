@@ -1,8 +1,10 @@
 ---
 import PageHead from '../components/site/PageHead.astro';
 import Pagination from '../components/stories/Pagination.astro';
+import type { Doc } from '../core/content/doc';
 import { parsePage, STORIES_PER_PAGE } from '../core/paging';
 import { settingDefaults } from '../core/settings';
+import { relatedStoryHref } from '../core/sumat/letters';
 import { db } from '../db/client';
 import { type LetterFilter, listLetters } from '../db/queries/letters';
 import { getSettings } from '../db/queries/settings';
@@ -26,6 +28,7 @@ const [result, prompt, copy] = await Promise.all([
   getSettings(db, settingDefaults('page.letters.intro', 'sumat.home_note')),
 ]);
 if (page > result.pages) return Astro.rewrite('/404');
+const letters = result.letters.map((l) => ({ ...l, related: relatedStoryHref(l.body as Doc) }));
 
 const href = (f: LetterFilter, p = 1) => {
   const u = new URLSearchParams();
@@ -70,10 +73,15 @@ const dayMonth = new Intl.DateTimeFormat('en-US', {
       ) : (
         <>
           <ul class="grid">
-            {result.letters.map((l) => (
+            {letters.map((l) => (
               <li class="letter">
                 {l.prompt && <p class="prompt">{l.prompt}</p>}
                 <blockquote>“{l.text}”</blockquote>
+                {l.related && (
+                  <a class="related" href={l.related}>
+                    Read our story on this
+                  </a>
+                )}
                 <div class="meta">
                   <span>{l.signature ?? 'Anonymous'}</span>
                   {l.publishedAt && <time datetime={isoDate(l.publishedAt)}>{dayMonth.format(l.publishedAt)}</time>}
@@ -137,6 +145,13 @@ const dayMonth = new Intl.DateTimeFormat('en-US', {
     font-weight: 500;
     line-height: 27px;
     letter-spacing: -0.02em;
+  }
+  .related {
+    align-self: flex-start;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: underline;
   }
   .meta {
     display: flex;
