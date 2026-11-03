@@ -39,6 +39,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
+  // Admin API writes come only from admin pages on this site (JSON posts skip Astro's form check).
+  if (
+    isAdminApi(path) &&
+    context.request.method !== 'GET' &&
+    context.request.headers.get('Origin') !== url.origin
+  ) {
+    return Response.json({ ok: false, error: 'origin' }, { status: 403 });
+  }
+
   // Signed in with the shared account, but nobody picked a name: everything waits on the picker.
   if (
     locals.editor &&
