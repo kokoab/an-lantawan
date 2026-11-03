@@ -24,9 +24,18 @@ const weekday = new Intl.DateTimeFormat('en-US', {
 
 const days = (d: Date) => Math.round(Date.parse(`${dayKey.format(d)}T00:00:00Z`) / 86_400_000);
 
-export function formatWhen(d: Date | null, now: Date, { withTime = true } = {}) {
+/**
+ * `olderAsDate` drops the time from anything before yesterday and always shows its year,
+ * as story lists do: “March 11, 2026”.
+ */
+export function formatWhen(
+  d: Date | null,
+  now: Date,
+  { withTime = true, olderAsDate = false } = {},
+) {
   if (!d) return '';
   const diff = days(d) - days(now);
+  if (olderAsDate && diff < -1) return monthDayYear.format(d);
   const t = withTime ? `, ${time.format(d)}` : '';
   if (diff === 0) return withTime ? `Today, ${time.format(d)}` : 'Today';
   if (diff === -1) return `Yesterday${t}`;
