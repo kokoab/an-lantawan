@@ -79,24 +79,32 @@ export const issueForm = z.object({
   publishedOn: date,
 });
 
-export const storyForm = z.object({
-  title: text(200, 'Give the story a headline.'),
-  slug,
-  dek: optionalText(400),
-  sectionId: id,
-  kind: z.enum(STORY_KINDS, { message: 'Choose what kind of story this is.' }),
-  publishedAt: optionalDateTime,
-  videoUrl: optionalText(500),
-  cartoonOnTop: checkbox,
-  writerPhoto: checkbox,
-  pinned: checkbox,
-  coverId: optionalId,
-  body: z.string().max(2_000_000, 'This story is too long to save in one piece.'),
-  tags: z.string().max(600),
-  creditPerson: z.array(z.string()),
-  creditRole: z.array(z.string()),
-  eventIds: z.array(z.string()),
+const names = z.array(z.string().trim().max(80)).max(12);
+
+/** What the story editor sends on every save. Drafts may be unfinished; publishing checks the rest. */
+export const storyPayload = z.object({
+  sectionId: z.number().int().positive(),
+  kind: z.enum(STORY_KINDS),
+  title: z.string().trim().max(200, 'Keep the headline under 200 characters.'),
+  slug: z.string().trim().toLowerCase().max(80),
+  slugAuto: z.boolean(),
+  dek: z.string().trim().max(400, 'Keep the summary under 400 characters.'),
+  credits: z.object({ writer: names, photographer: names, artist: names }),
+  body: z.unknown(),
+  coverId: z.number().int().positive().nullable(),
+  cartoonOnTop: z.boolean(),
+  writerPhoto: z.boolean(),
+  videoUrl: z.string().trim().max(500),
+  tags: z.array(z.string()).max(20),
+  eventIds: z.array(z.number().int().positive()).max(60),
+  shareTitle: z.string().trim().max(70, 'Keep the share title to 70 characters.'),
+  shareSummary: z.string().trim().max(160, 'Keep the share summary to 160 characters.'),
+  pinned: z.boolean(),
+  /** When this editor last loaded or saved the story, to notice someone else's save. */
+  baseUpdatedAt: z.number().nullable(),
+  force: z.boolean().optional(),
 });
+export type StoryPayload = z.infer<typeof storyPayload>;
 
 export const promptForm = z.object({
   text: text(300, 'Write the question students answer.'),
