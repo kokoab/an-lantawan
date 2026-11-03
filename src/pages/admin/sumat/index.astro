@@ -1,122 +1,527 @@
 ---
-import { parsePage } from '../../../core/paging';
+import CheckIcon from '../../../assets/icons/admin/check.svg';
+import CloseIcon from '../../../assets/icons/admin/close.svg';
+import PlusIcon from '../../../assets/icons/admin/plus.svg';
+import SendIcon from '../../../assets/icons/admin/send.svg';
+import {
+  letterSlug,
+  possibleDuplicates,
+  relatedStoryBody,
+  signatureChoices,
+} from '../../../core/sumat/letters';
+import { formatClock, formatWhen } from '../../../core/when';
 import { db } from '../../../db/client';
-import { listMessages, type MessageStatus } from '../../../db/queries/admin/sumat';
+import { listAllSections } from '../../../db/queries/admin/sections';
+import { storySlugTaken } from '../../../db/queries/admin/stories';
+import {
+  closeOpenPrompts,
+  getMessage,
+  listMessages,
+  type MessageStatus,
+  openSumat,
+  publishLetter,
+  setMessageNotes,
+  setStatuses,
+  updatePrompt,
+} from '../../../db/queries/admin/sumat';
+import { listNewest } from '../../../db/queries/stories';
+import { currentPrompt } from '../../../db/queries/sumat';
 import Admin from '../../../layouts/Admin.astro';
-import { formatStamp } from '../../../lib/format';
+import { doneRedirect, editorOf, one, readForm, record } from '../../../lib/admin';
+import { storyUrl } from '../../../lib/urls';
 
-const TABS: Array<{ value: MessageStatus; label: string; note: string }> = [
-  { value: 'new', label: 'New', note: 'Messages nobody has sorted yet.' },
-  { value: 'shortlisted', label: 'Shortlisted', note: 'Kept for a closer look or to publish.' },
-  { value: 'published', label: 'Published', note: 'Messages that ran as letters.' },
-  {
-    value: 'archived',
-    label: 'Archived',
-    note: 'Read and set aside. Archived messages stay here.',
-  },
+const editor = editorOf(Astro);
+const now = new Date();
+const TABS: Array<{ value: MessageStatus; label: string }> = [
+  { value: 'new', label: 'New' },
+  { value: 'shortlisted', label: 'Shortlisted' },
+  { value: 'published', label: 'Published' },
+  { value: 'archived', label: 'Archived' },
 ];
 const tab = TABS.find((t) => t.value === Astro.url.searchParams.get('show')) ?? TABS[0];
-const page = parsePage(Astro.url.searchParams.get('page')) ?? 1;
-const { rows, counts, pages } = await listMessages(db, { status: tab.value, page, perPage: 40 });
-const href = (p: number) => `/admin/sumat?show=${tab.value}${p > 1 ? `&page=${p}` : ''}`;
+const base = `/admin/sumat?show=${tab.value}`;
+let problem: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const intent = one(form, 'intent');
+  const list = (n: string) =>
+    ([] as string[])
+      .concat(form[n] ?? [])
+      .map(Number)
+      .filter((x) => Number.isInteger(x) && x > 0);
+  const openId = Number(one(form, 'open')) || null;
+  const back = `${base}${openId ? `&open=${openId}` : ''}`;
+  const prompt = await currentPrompt(db);
+
+  if (intent === 'prompt') {
+    const text = one(form, 'prompt').trim().slice(0, 300);
+    if (!text) problem = 'Write the question students answer.';
+    else {
+      if (prompt)
+        await updatePrompt(db, prompt.id, {
+          text,
+          opensAt: prompt.opensAt,
+          closesAt: prompt.closesAt,
+        });
+      else await openSumat(db, text);
+      await record(editor, {
+        action: 'update',
+        entityType: 'sumat',
+        summary: `Set the Sumat prompt to “${text}”`,
+      });
+      return doneRedirect(Astro, back, 'saved');
+    }
+  } else if (intent === 'open') {
+    const on = one(form, 'on') === 'on';
+    const text = one(form, 'prompt').trim().slice(0, 300) || prompt?.text || '';
+    if (on && !text) problem = 'Write a prompt first, then open Sumat.';
+    else {
+      if (on) await openSumat(db, text);
+      else await closeOpenPrompts(db);
+      await record(editor, {
+        action: 'update',
+        entityType: 'sumat',
+        summary: on ? 'Opened Sumat' : 'Closed Sumat',
+      });
+      return doneRedirect(Astro, back, 'saved');
+    }
+  } else if (intent === 'notes' && openId) {
+    await setMessageNotes(db, openId, one(form, 'notes').trim().slice(0, 2000) || null);
+    return doneRedirect(Astro, back, 'saved');
+  } else if (['shortlisted', 'archived', 'new'].includes(intent) || intent === 'duplicate') {
+    const ids = list('ids').length ? list('ids') : openId ? [openId] : [];
+    const status = (intent === 'duplicate' ? 'archived' : intent) as MessageStatus;
+    if (ids.length) {
+      await setStatuses(db, ids, status);
+      if (intent === 'duplicate')
+        for (const id of ids) await setMessageNotes(db, id, 'Marked as a duplicate.');
+      const label = {
+        shortlisted: 'Shortlisted',
+        archived: intent === 'duplicate' ? 'Marked as duplicate' : 'Archived',
+        new: 'Moved back to New',
+      }[status as 'new'];
+      await record(editor, {
+        action: 'update',
+        entityType: 'sumat',
+        summary: `${label} ${ids.length} Sumat ${ids.length === 1 ? 'letter' : 'letters'}`,
+        undo: { kind: 'messages', ids, status: tab.value },
+      });
+    }
+    return doneRedirect(
+      Astro,
+      base,
+      intent === 'archived' || intent === 'duplicate' ? 'archived' : 'saved',
+    );
+  } else if (intent === 'publish' && openId) {
+    const message = await getMessage(db, openId);
+    if (message && !message.letter) {
+      const choices = signatureChoices(message.sentAs, message.name, message.courseYear);
+      const signature = choices.find((c) => c === one(form, 'signature')) ?? choices[0];
+      const text = (one(form, 'text').trim() || message.body).slice(0, 3000);
+      const related = Number(one(form, 'related')) || null;
+      const relatedStory = related
+        ? (await listNewest(db, { limit: 60 })).find((s) => s.id === related)
+        : null;
+      const sections = (await listAllSections(db)).filter((s) => !s.archivedAt);
+      const sectionId = sections.find((s) => s.slug === 'opinion')?.id ?? sections[0].id;
+      const slug = letterSlug(message.id);
+      if (await storySlugTaken(db, slug, null))
+        problem = 'A story already uses this letter’s address.';
+      else {
+        const storyId = await publishLetter(db, message, {
+          text,
+          signature,
+          sectionId,
+          slug,
+          publishedAt: new Date(),
+          body: relatedStory ? relatedStoryBody(storyUrl(relatedStory)) : undefined,
+        });
+        await record(editor, {
+          action: 'publish',
+          entityType: 'story',
+          entityId: storyId,
+          summary: `Published a Sumat letter signed “${signature}”`,
+        });
+        return doneRedirect(Astro, `${base}&open=${message.id}`, 'published');
+      }
+    }
+  }
+  Astro.response.status = 422;
+}
+
+const [{ rows, counts }, prompt] = await Promise.all([
+  listMessages(db, { status: tab.value, page: 1, perPage: 100 }),
+  currentPrompt(db),
+]);
+const openId = Number(Astro.url.searchParams.get('open')) || rows[0]?.id || null;
+const open = openId ? await getMessage(db, openId) : null;
+const dupes = possibleDuplicates(rows);
+const recent = open && !open.letter ? await listNewest(db, { limit: 20 }) : [];
+const signer = (m: { sentAs: string; name: string | null; courseYear: string | null }) =>
+  [m.sentAs === 'named' && m.name ? m.name : 'Anonymous', m.courseYear].filter(Boolean).join(', ');
+const when = (d: Date) => {
+  const w = formatWhen(d, now, { withTime: false });
+  return w === 'Today' ? formatClock(d) : w;
+};
+const index = rows.findIndex((r) => r.id === open?.id);
+const STATUS_TAG: Record<MessageStatus, { label: string; tone: string }> = {
+  new: { label: 'New', tone: 'sun' },
+  shortlisted: { label: 'Shortlisted', tone: 'grey' },
+  published: { label: 'Published', tone: 'ink' },
+  archived: { label: 'Archived', tone: '' },
+};
 ---
 
-<Admin title="Sumat inbox" section="sumat">
-  <a slot="actions" class="btn btn-secondary" href="/admin/sumat/prompts">Prompts</a>
-  <nav class="tabs" aria-label="Inbox">
-    {
-      TABS.map((t) => (
-        <a
-          class:list={['btn', t.value === tab.value ? 'btn-primary' : 'btn-secondary']}
-          href={`/admin/sumat?show=${t.value}`}
-          aria-current={t.value === tab.value ? 'page' : undefined}
-        >
-          {t.label} <span class="n">{counts[t.value] ?? 0}</span>
-        </a>
-      ))
-    }
+<Admin title="Sumat" section="sumat" subtitle="Letters are read only by the editorial team">
+  {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
+
+  <section class="panel prompt-bar" aria-label="This week’s prompt">
+    <form method="post" class="prompt-form">
+      <input type="hidden" name="intent" value="prompt" />
+      <div class="field">
+        <label for="prompt">This week’s prompt</label>
+        <input id="prompt" name="prompt" type="text" maxlength="300" value={prompt?.text ?? ''} placeholder="What should LNU admin hear from you?" />
+      </div>
+      <button class="btn btn-primary" type="submit"><CheckIcon /> Save prompt</button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="intent" value="open" />
+      <input type="hidden" name="prompt" value={prompt?.text ?? ''} data-prompt-copy />
+      <label class="switch">
+        <input type="checkbox" name="on" checked={prompt !== null} data-autosubmit-check />
+        <span class="switch-text"><strong>Sumat is {prompt ? 'open' : 'closed'}</strong></span>
+      </label>
+    </form>
+  </section>
+
+  <nav class="segments" aria-label="Letters">
+    {TABS.map((t) => (
+      <a class:list={['btn', t.value === tab.value ? 'btn-primary' : 'btn-secondary']} href={`/admin/sumat?show=${t.value}`} aria-current={t.value === tab.value ? 'page' : undefined}>
+        {t.value === 'new' && t.value === tab.value && <PlusIcon />}
+        {t.label}{t.value !== 'archived' && ` (${counts[t.value] ?? 0})`}
+      </a>
+    ))}
   </nav>
-  <p class="muted small">{tab.note} Only editors can read the inbox.</p>
+
   {
     rows.length === 0 ? (
       <div class="empty-state">
-        <h2>{tab.value === 'new' ? 'No new messages' : `Nothing ${tab.label.toLowerCase()}`}</h2>
-        <p>{tab.value === 'new' ? 'New messages from /sumat show up here.' : 'Messages you move here show up in this list.'}</p>
+        <h2>{tab.value === 'new' ? 'No new letters' : `No ${tab.label.toLowerCase()} letters`}</h2>
+        <p>{tab.value === 'new' ? (prompt ? 'New letters from /sumat show up here.' : 'Sumat is closed. Write a prompt and open it to get letters.') : 'Letters you move here show up in this list.'}</p>
       </div>
     ) : (
-      <ul class="messages">
-        {rows.map((m) => (
-          <li>
-            <a href={`/admin/sumat/${m.id}`}>
-              <span class="body">{m.body.length > 280 ? `${m.body.slice(0, 280)}…` : m.body}</span>
-              <span class="meta small">
-                <span class:list={['badge', { ink: m.sentAs === 'named' }]}>{m.sentAs === 'named' ? m.name || 'Signed' : 'Anonymous'}</span>
-                <span class="muted">{formatStamp(m.receivedAt)}</span>
-                <span class="muted prompt">{m.promptText}</span>
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
+      <form method="post" class="inbox" id="inbox">
+        <input type="hidden" name="open" value={open?.id ?? ''} />
+        <div class="bulk" hidden data-bulk>
+          <strong><span data-bulk-count>0</span> selected</strong>
+          <span class="bulk-actions">
+            {tab.value !== 'shortlisted' && <button class="btn btn-small" type="submit" name="intent" value="shortlisted">Shortlist</button>}
+            <button class="btn btn-small" type="submit" name="intent" value="duplicate">Mark as duplicate</button>
+            {tab.value !== 'archived' && <button class="btn btn-small" type="submit" name="intent" value="archived">Archive</button>}
+            <button class="link-button" type="button" data-bulk-clear>Clear</button>
+          </span>
+        </div>
+        <div class="panes">
+          <ul class="list" aria-label="Letters">
+            {rows.map((m) => (
+              <li class:list={{ on: m.id === open?.id }}>
+                <label class="pick">
+                  <input type="checkbox" name="ids" value={m.id} aria-label={`Select the letter from ${signer(m)}`} />
+                </label>
+                <a href={`${base}&open=${m.id}`} data-letter={m.id}>
+                  <span class="meta">
+                    <strong>{signer(m)}</strong>
+                    <span class="muted">{when(m.receivedAt)}</span>
+                  </span>
+                  <span class="body">{m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body}</span>
+                  {dupes.has(m.id) && <span class="tag small">Possible duplicate of a letter from {formatClock(dupes.get(m.id)?.receivedAt ?? m.receivedAt)}</span>}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          {open && (
+            <article class="panel reader" aria-label="Letter">
+              <div class="reader-head">
+                <span class:list={['tag', STATUS_TAG[open.status].tone]}>{STATUS_TAG[open.status].label}</span>
+                <span class="muted small">Received {formatWhen(open.receivedAt, now)}</span>
+              </div>
+              <dl class="facts">
+                <div><dt>Sent as</dt><dd>{open.sentAs === 'named' ? open.name || 'Signed' : 'Anonymous'}</dd></div>
+                {open.courseYear && <div><dt>Course and year</dt><dd>{open.courseYear}</dd></div>}
+                <div class="prompt-fact"><dt>Prompt</dt><dd>{open.promptText}</dd></div>
+              </dl>
+              <p class="letter">{open.body}</p>
+              <div class="form-actions">
+                {open.status !== 'shortlisted' && open.status !== 'published' && (
+                  <button class="btn btn-primary" type="submit" name="intent" value="shortlisted" form="single">Shortlist</button>
+                )}
+                {open.letter ? (
+                  <a class="btn btn-secondary" href={`/admin/stories/${open.letter.id}`}>Edit the letter</a>
+                ) : (
+                  <button class="btn btn-secondary" type="button" data-open-dialog="publish-letter">Mark as published</button>
+                )}
+                {open.status !== 'archived' && <button class="btn btn-secondary" type="submit" name="intent" value="archived" form="single">Archive</button>}
+                {open.status !== 'new' && open.status !== 'published' && <button class="btn btn-secondary" type="submit" name="intent" value="new" form="single">Move back to New</button>}
+              </div>
+              <div class="field">
+                <label for="notes">Editor notes</label>
+                <textarea id="notes" name="notes" form="notes-form" rows="4" maxlength="2000" placeholder="Only the editorial team sees these notes.">{open.notes ?? ''}</textarea>
+                <button class="visually-hidden" type="submit" form="notes-form">Save notes</button>
+              </div>
+            </article>
+          )}
+        </div>
+      </form>
     )
   }
+
   {
-    pages > 1 && (
-      <nav class="pager" aria-label="Pages">
-        {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Previous</a> : <span />}
-        <span class="muted small">Page {page} of {pages}</span>
-        {page < pages ? <a class="btn btn-secondary" href={href(page + 1)}>Next</a> : <span />}
-      </nav>
+    open && (
+      <>
+        <form method="post" id="single" hidden>
+          <input type="hidden" name="open" value={open.id} />
+        </form>
+        <form method="post" id="notes-form" hidden>
+          <input type="hidden" name="intent" value="notes" />
+          <input type="hidden" name="open" value={open.id} />
+        </form>
+        <div class="keys muted small" aria-hidden="true">
+          Keyboard <kbd>J</kbd> Next letter <kbd>K</kbd> Previous <kbd>S</kbd> Shortlist <kbd>A</kbd> Archive <kbd>X</kbd> Select
+        </div>
+      </>
+    )
+  }
+
+  {
+    open && !open.letter && (
+      <dialog class="dialog" id="publish-letter" aria-labelledby="letter-title" slot="dialogs">
+        <form method="post">
+          <input type="hidden" name="intent" value="publish" />
+          <input type="hidden" name="open" value={open.id} />
+          <div class="dialog-head">
+            <div>
+              <h2 id="letter-title">Publish this letter</h2>
+              <p>It goes on Published letters. Nothing else about the sender is shown.</p>
+            </div>
+            <button type="button" class="dialog-close" aria-label="Close" data-close-dialog><CloseIcon /></button>
+          </div>
+          <blockquote class="quote">“{open.body}”</blockquote>
+          <div class="form">
+            <div class="field">
+              <label for="signature">Signed as</label>
+              <select id="signature" name="signature">
+                {signatureChoices(open.sentAs, open.name, open.courseYear).map((c) => <option value={c}>{c}</option>)}
+              </select>
+              <p class="hint">{open.sentAs === 'anonymous' ? 'Sent anonymously, so it can’t be published with a name.' : 'Signed by the writer. They can still be published as anonymous.'}</p>
+            </div>
+            <div class="field">
+              <label for="fix">Fix typos (optional)</label>
+              <textarea id="fix" name="text" rows="3" maxlength="3000" placeholder="Only spelling and punctuation. Don’t change the meaning.">{''}</textarea>
+            </div>
+            <div class="field">
+              <label for="related">Our story on this (optional)</label>
+              <select id="related" name="related">
+                <option value="">None</option>
+                {recent.map((s) => <option value={s.id}>{s.title}</option>)}
+              </select>
+              <p class="hint">Adds a “Read our story on this” link under the letter.</p>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+            <button type="submit" class="btn btn-sunrise"><SendIcon /> Publish letter</button>
+          </div>
+        </form>
+      </dialog>
     )
   }
 </Admin>
 
+<script>
+  import '../../../scripts/sumat-inbox';
+</script>
+
 <style>
-  .tabs {
+  .prompt-bar {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .prompt-form {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
+    align-items: flex-end;
+    gap: 16px;
   }
-  .n {
-    margin-left: 6px;
-    font-weight: 400;
-    opacity: 0.7;
+  .prompt-form .field {
+    flex: 1 1 320px;
   }
-  .messages {
+  .switch {
+    align-items: center;
+  }
+  .inbox {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin: 12px 0 0;
-    padding: 0;
-    list-style: none;
+    gap: 16px;
   }
-  .messages a {
+  .bulk {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 16px;
-    border: 1px solid var(--grey-300);
-    background: var(--white);
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--ink);
+    color: var(--white);
   }
-  .messages a:hover {
-    border-color: var(--ink);
-  }
-  .body {
-    font-size: 16px;
-    line-height: 24px;
-    white-space: pre-line;
-  }
-  .meta {
+  .bulk-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    gap: 8px;
   }
-  .prompt {
-    overflow: hidden;
-    max-width: 420px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .bulk .btn {
+    border-color: var(--white);
+    background: var(--ink);
+    color: var(--white);
+  }
+  .bulk .link-button {
+    color: var(--white);
+  }
+  .panes {
+    display: grid;
+    gap: 16px;
+    align-items: start;
+  }
+  .list {
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+    list-style: none;
+  }
+  .list li {
+    position: relative;
+    display: flex;
+    gap: 10px;
+    padding: 20px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .list li:first-child {
+    border-top: 0;
+  }
+  .list li.on {
+    border-left: 3px solid var(--ink);
+    padding-left: 17px;
+    background: var(--grey-100);
+  }
+  .pick {
+    display: none;
+    padding-top: 1px;
+  }
+  .selecting .pick {
+    display: block;
+  }
+  .pick input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #ffd400;
+  }
+  .list a {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .body {
+    font-size: 15px;
+    line-height: 22px;
+  }
+  .list .tag {
+    align-self: flex-start;
+    padding: 2px 6px;
+    border-color: var(--ink);
+    font-size: 11px;
+  }
+  .reader-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 40px;
+    margin: 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--grey-300);
+  }
+  dt {
+    font-size: 12px;
+    color: var(--grey-600);
+  }
+  dd {
+    margin: 2px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .letter {
+    margin: 8px 0;
+    font-size: 24px;
+    line-height: 34px;
+    letter-spacing: -0.02em;
+    white-space: pre-line;
+  }
+  .keys {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  kbd {
+    padding: 1px 6px;
+    border: 1px solid var(--grey-600);
+    background: var(--white);
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--ink);
+  }
+  .quote {
+    margin: 0 0 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-50);
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 26px;
+  }
+  @media (min-width: 1024px) {
+    .prompt-bar {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .prompt-bar > form:first-child {
+      flex: 1;
+    }
+    .panes {
+      grid-template-columns: 460px minmax(0, 1fr);
+      gap: 24px;
+    }
+    .reader {
+      padding: 32px;
+    }
+    .keys {
+      display: flex;
+    }
   }
 </style>
