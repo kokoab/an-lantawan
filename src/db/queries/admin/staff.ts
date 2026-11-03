@@ -3,7 +3,10 @@ import { slugify } from '../../../core/slug';
 import type { Db } from '../../client';
 import { media, people, staffTerms, storyAuthors } from '../../schema';
 
-export type PersonInput = Pick<typeof people.$inferInsert, 'name' | 'slug' | 'bio' | 'photoId'>;
+export type PersonInput = Pick<
+  typeof people.$inferInsert,
+  'name' | 'slug' | 'bio' | 'photoId' | 'hasProfile' | 'canEdit'
+>;
 
 /** Everyone who can be credited, for pickers. Archived people are left out. */
 export async function listPeopleChoices(db: Db) {
@@ -76,9 +79,69 @@ export async function setPersonArchived(db: Db, id: number, archived: boolean) {
 
 export async function addStaffTerm(
   db: Db,
-  term: Pick<typeof staffTerms.$inferInsert, 'personId' | 'schoolYear' | 'position' | 'sort'>,
+  term: Pick<
+    typeof staffTerms.$inferInsert,
+    'personId' | 'schoolYear' | 'position' | 'sort' | 'onBoard'
+  >,
 ) {
   await db.insert(staffTerms).values(term).onConflictDoNothing();
+}
+
+export async function updateStaffTerm(
+  db: Db,
+  personId: number,
+  termId: number,
+  term: { position: string; onBoard: boolean },
+) {
+  await db
+    .update(staffTerms)
+    .set(term)
+    .where(and(eq(staffTerms.id, termId), eq(staffTerms.personId, personId)));
+}
+
+/** Everyone on one school year's staff, with what the Staff page edits. */
+export async function listStaffYear(db: Db, schoolYear: string) {
+  return db
+    .select({
+      termId: staffTerms.id,
+      position: staffTerms.position,
+      onBoard: staffTerms.onBoard,
+      sort: staffTerms.sort,
+      personId: people.id,
+      name: people.name,
+      slug: people.slug,
+      bio: people.bio,
+      hasProfile: people.hasProfile,
+      canEdit: people.canEdit,
+      photoId: people.photoId,
+      photoKey: media.key,
+    })
+    .from(staffTerms)
+    .innerJoin(people, eq(people.id, staffTerms.personId))
+    .leftJoin(media, eq(media.id, people.photoId))
+    .where(and(eq(staffTerms.schoolYear, schoolYear), isNull(people.archivedAt)));
+}
+
+/** Positions used before, for the role suggestions. */
+export async function listPositions(db: Db) {
+  const rows = await db
+    .selectDistinct({ position: staffTerms.position })
+    .from(staffTerms)
+    .orderBy(asc(staffTerms.position));
+  return rows.map((r) => r.position);
+}
+
+/** A URL name for a new person: their name, with a number added if it's taken. */
+export async function freePersonSlug(db: Db, name: string) {
+  const base = slugify(name) || 'person';
+  const rows = await db
+    .select({ slug: people.slug })
+    .from(people)
+    .where(like(people.slug, `${base}%`));
+  const taken = new Set(rows.map((r) => r.slug));
+  let slug = base;
+  for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+  return slug;
 }
 
 export async function removeStaffTerm(db: Db, personId: number, termId: number) {
