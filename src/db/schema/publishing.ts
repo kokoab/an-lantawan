@@ -237,6 +237,8 @@ export const issues = sqliteTable(
     slug: text('slug').notNull().unique(),
     description: text('description'),
     publishedOn: text('published_on').notNull(),
+    /** Read from the PDF on upload when it can be; editors can correct it. */
+    pages: integer('pages'),
     pdfId: integer('pdf_id')
       .notNull()
       .references(() => media.id, { onDelete: 'restrict' }),
