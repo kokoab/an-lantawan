@@ -1,117 +1,425 @@
 ---
+import EditIcon from '../../assets/icons/admin/edit.svg';
+import PlusIcon from '../../assets/icons/admin/plus.svg';
+import { isYearStart, schoolYearOf } from '../../core/people';
+import { festivalDay, manilaDay } from '../../core/sportsfest/display';
+import { formatClock, formatToday, formatWhen } from '../../core/when';
 import { db } from '../../db/client';
-import { getOverview } from '../../db/queries/admin/overview';
+import {
+  getTopStory,
+  listNewLetters,
+  listOngoing,
+  listWaiting,
+} from '../../db/queries/admin/overview';
+import { getSettings, saveSettings } from '../../db/queries/settings';
 import Admin from '../../layouts/Admin.astro';
-import { editorOf } from '../../lib/admin';
-import { formatStamp } from '../../lib/format';
+import { doneRedirect, editorOf, one, readForm, record } from '../../lib/admin';
+import { mediaUrl } from '../../lib/urls';
 
 const editor = editorOf(Astro);
-const o = await getOverview(db);
-const STATUS = {
-  draft: 'Draft',
-  scheduled: 'Scheduled',
-  published: 'Published',
-  archived: 'Archived',
+const now = new Date();
+const year = schoolYearOf(now);
+type Checklist = { year: string; done: string[]; hidden: boolean };
+const CHECKLIST = [
+  { id: 'staff', label: 'Add this year’s staff and roles', link: 'Staff', href: '/admin/staff' },
+  { id: 'leavers', label: 'Remove people who have left', link: 'Staff', href: '/admin/staff' },
+  {
+    id: 'prompt',
+    label: 'Set the first Sumat prompt',
+    link: 'Sumat',
+    href: '/admin/sumat/prompts',
+  },
+  {
+    id: 'pages',
+    label: 'Check the menu and the About page',
+    link: 'Site settings',
+    href: '/admin/settings',
+  },
+  {
+    id: 'sportsfest',
+    label: 'Set up Sportsfest dates and tribus',
+    link: 'Sportsfest',
+    href: '/admin/sportsfest',
+  },
+  {
+    id: 'password',
+    label: 'Change the publication account password',
+    link: 'How to',
+    href: 'https://myaccount.google.com/signinoptions/password',
+  },
+];
+
+const settings = await getSettings(db, {
+  'overview.checklist': { year, done: [], hidden: false } as Checklist,
+});
+const saved = settings['overview.checklist'];
+const checklist: Checklist = saved.year === year ? saved : { year, done: [], hidden: false };
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const intent = one(form, 'intent');
+  if (intent === 'banner') {
+    const on = one(form, 'on') === 'on';
+    await saveSettings(db, { 'home.sportsfest_banner': on }, editor.id);
+    await record(editor, {
+      action: 'update',
+      entityType: 'home',
+      summary: `${on ? 'Turned on' : 'Turned off'} the Sportsfest banner on the homepage`,
+      undo: { kind: 'settings', before: { 'home.sportsfest_banner': !on } },
+    });
+    return doneRedirect(Astro, '/admin', 'saved');
+  }
+  if (intent === 'checklist') {
+    const id = one(form, 'item');
+    const done = new Set(checklist.done);
+    if (CHECKLIST.some((c) => c.id === id)) {
+      if (done.has(id)) done.delete(id);
+      else done.add(id);
+    }
+    await saveSettings(db, { 'overview.checklist': { ...checklist, done: [...done] } }, editor.id);
+    return Astro.redirect('/admin#year', 303);
+  }
+  if (intent === 'hide-checklist') {
+    await saveSettings(db, { 'overview.checklist': { ...checklist, hidden: true } }, editor.id);
+    return Astro.redirect('/admin', 303);
+  }
+}
+
+const [waiting, top, letters, ongoing] = await Promise.all([
+  listWaiting(db),
+  getTopStory(db),
+  listNewLetters(db),
+  listOngoing(db),
+]);
+const day = ongoing
+  ? festivalDay(ongoing.sportsfest.startsOn, ongoing.sportsfest.endsOn, manilaDay(now))
+  : null;
+const showChecklist = isYearStart(now) && !checklist.hidden;
+const doneCount = CHECKLIST.filter((c) => checklist.done.includes(c.id)).length;
+const STATUS = { draft: 'Draft', scheduled: 'Scheduled' } as const;
+const letterMeta = (m: (typeof letters.rows)[number]) => {
+  const who = m.sentAs === 'named' && m.name ? m.name : 'Anonymous';
+  const when =
+    manilaDay(m.receivedAt) === manilaDay(now)
+      ? formatClock(m.receivedAt)
+      : formatWhen(m.receivedAt, now, { withTime: false });
+  return [who, m.courseYear, when].filter(Boolean).join(', ');
 };
 ---
 
-<Admin title={`Hi, ${editor.name.split(' ')[0]}`} section="overview">
-  <a slot="actions" class="btn btn-primary" href="/admin/stories/new">Write a story</a>
+<Admin title="Overview" section="overview" subtitle={formatToday(now)}>
+  <a slot="actions" class="btn btn-sunrise" href="/admin/stories/new"><PlusIcon /> New story</a>
 
-  <div class="stat-grid">
-    <a class="stat" href="/admin/sumat">
-      <strong>{o.unread}</strong>
-      <span>New Sumat {o.unread === 1 ? 'message' : 'messages'}</span>
-    </a>
-    <a class="stat" href="/admin/stories?status=draft">
-      <strong>{o.drafts}</strong>
-      <span>{o.drafts === 1 ? 'Draft' : 'Drafts'}</span>
-    </a>
-    <a class="stat" href="/admin/stories?status=scheduled">
-      <strong>{o.scheduled}</strong>
-      <span>Scheduled</span>
-    </a>
-    <a class="stat" href="/admin/stories?status=published">
-      <strong>{o.published}</strong>
-      <span>Published</span>
-    </a>
-  </div>
+  {
+    showChecklist && (
+      <section class="panel year" id="year" aria-labelledby="year-title">
+        <div class="panel-head">
+          <h2 id="year-title">
+            New school year: {doneCount} of {CHECKLIST.length} done
+          </h2>
+          <form method="post">
+            <input type="hidden" name="intent" value="hide-checklist" />
+            <button class="link-button" type="submit">Hide until next June</button>
+          </form>
+        </div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax={CHECKLIST.length} aria-valuenow={doneCount} aria-label="Checklist progress">
+          {CHECKLIST.map((c) => <span class:list={{ on: checklist.done.includes(c.id) }} />)}
+        </div>
+        <ul class="checklist">
+          {CHECKLIST.map((c) => {
+            const isDone = checklist.done.includes(c.id);
+            return (
+              <li class:list={{ done: isDone }}>
+                <form method="post">
+                  <input type="hidden" name="intent" value="checklist" />
+                  <input type="hidden" name="item" value={c.id} />
+                  <button class="tick" type="submit" aria-pressed={isDone} aria-label={`${isDone ? 'Untick' : 'Tick'}: ${c.label}`}>
+                    {isDone && <span aria-hidden="true">✓</span>}
+                  </button>
+                </form>
+                <span class="label">{c.label}</span>
+                <a class="text-link" href={c.href} {...(c.href.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {})}>
+                  {c.link}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    )
+  }
 
   <div class="columns main-side">
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Recently edited</h2>
-        <a class="small" href="/admin/stories">All stories</a>
-      </div>
-      {
-        o.recent.length === 0 ? (
-          <p class="muted">No stories yet. Write the first one.</p>
-        ) : (
-          <div class="table-wrap">
-            <table class="table">
+    <div class="later-on-phone">
+      <section class="panel" aria-labelledby="waiting-title">
+        <div class="panel-head">
+          <h2 id="waiting-title">Drafts and scheduled</h2>
+          <span>{waiting.total} waiting</span>
+        </div>
+        {
+          waiting.rows.length === 0 ? (
+            <p class="panel-note">Nothing waiting. New drafts show up here.</p>
+          ) : (
+            <table class="table bare">
+              <thead>
+                <tr>
+                  <th scope="col">Story</th>
+                  <th scope="col" class="hide-sm">Status</th>
+                  <th scope="col" class="hide-sm">Updated</th>
+                </tr>
+              </thead>
               <tbody>
-                {o.recent.map((s) => (
+                {waiting.rows.map((s) => (
                   <tr>
-                    <th scope="row">
-                      <a href={`/admin/stories/${s.id}`}>{s.title}</a>
-                    </th>
-                    <td class="muted hide-sm">{s.section}</td>
                     <td>
-                      <span class:list={['badge', { ink: s.status === 'published', sun: s.status === 'scheduled' }]}>
-                        {STATUS[s.status]}
-                      </span>
+                      <a class="story-cell" href={`/admin/stories/${s.id}`}>
+                        {s.coverKey ? <img class="thumb" src={mediaUrl(s.coverKey)} alt="" loading="lazy" /> : <span class="thumb" />}
+                        <span class="text">
+                          <strong>{s.title}</strong>
+                          {s.editor && <span>{s.editor}</span>}
+                        </span>
+                      </a>
                     </td>
-                    <td class="muted small hide-sm">{formatStamp(s.updatedAt)}</td>
+                    <td class="hide-sm">
+                      <span class:list={['tag', { grey: s.status === 'scheduled' }]}>{STATUS[s.status as keyof typeof STATUS]}</span>
+                    </td>
+                    <td class="hide-sm">
+                      {formatWhen(s.status === 'scheduled' ? s.publishedAt : s.updatedAt, now)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        )
-      }
-    </section>
+          )
+        }
+        <a class="text-link phone-only" href="/admin/stories">All stories</a>
+      </section>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Activity</h2>
-        <a class="small" href="/admin/activity">All activity</a>
-      </div>
+      <section class="panel hide-on-phone" aria-labelledby="home-title">
+        <h2 id="home-title">On the homepage now</h2>
+        {
+          top.story ? (
+            <div class="lead">
+              {top.story.cover ? <img class="lead-photo" src={mediaUrl(top.story.cover.key)} alt="" /> : <span class="lead-photo" />}
+              <div class="lead-text">
+                <span class="muted small">{top.pinned ? 'Pinned top story' : 'Newest story, nothing pinned'}</span>
+                <strong>{top.story.title}</strong>
+              </div>
+              <a class="btn btn-secondary" href="/admin/home"><EditIcon /> Change</a>
+            </div>
+          ) : (
+            <p class="panel-note">No stories are published yet.</p>
+          )
+        }
+        <form method="post">
+          <input type="hidden" name="intent" value="banner" />
+          <label class="switch">
+            <input type="checkbox" name="on" checked={top.banner} data-autosubmit-check />
+            <span class="switch-text">
+              <strong>Sportsfest banner is {top.banner ? 'showing' : 'off'}</strong>
+              <span>The medal tally sits at the top of the homepage until you turn it off.</span>
+            </span>
+          </label>
+          <noscript><button class="btn btn-secondary btn-small" type="submit">Save</button></noscript>
+        </form>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel" aria-labelledby="sumat-title">
+        <div class="panel-head">
+          <h2 id="sumat-title">Sumat</h2>
+          <span>{letters.total} new {letters.total === 1 ? 'letter' : 'letters'}</span>
+        </div>
+        {
+          letters.rows.length === 0 ? (
+            <p class="panel-note">No new letters. New ones from /sumat show up here.</p>
+          ) : (
+            <ul class="list">
+              {letters.rows.map((m) => (
+                <li class="letter">
+                  <a href={`/admin/sumat/${m.id}`}>{m.body.length > 160 ? `${m.body.slice(0, 160)}…` : m.body}</a>
+                  <span class="muted small">{letterMeta(m)}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        <a class="btn btn-secondary" href="/admin/sumat">Open the inbox</a>
+      </section>
       {
-        o.activity.length === 0 ? (
-          <p class="muted">Changes made in the admin show up here.</p>
-        ) : (
-          <ul class="activity">
-            {o.activity.map((a) => (
-              <li>
-                <span>{a.summary}</span>
-                <span class="muted small">
-                  {a.editor ?? 'Someone'}, {formatStamp(a.at)}
-                </span>
-              </li>
-            ))}
-          </ul>
+        ongoing && (
+          <section class="panel first-on-phone" aria-labelledby="sf-title">
+            <div class="panel-head">
+              <h2 id="sf-title">Sportsfest</h2>
+              <span>{day ? `Day ${day.day} of ${day.of}` : `${ongoing.rows.length} ongoing`}</span>
+            </div>
+            {ongoing.rows.length === 0 ? (
+              <p class="panel-note">No event is being played right now.</p>
+            ) : (
+              <ul class="list">
+                {ongoing.rows.map((r) => (
+                  <li class="event">
+                    <span class="tag sun">Ongoing</span>
+                    <span class="text">
+                      <strong>
+                        {r.event}, {r.name.toLowerCase()}
+                      </strong>
+                      <span>{r.live ? `${r.live}, ongoing` : 'Ongoing'}</span>
+                    </span>
+                    <a class="text-link" href={`/admin/sportsfest/${ongoing.sportsfest.year}/${r.eventId}?category=${r.id}`}>
+                      Enter result
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )
       }
-    </section>
+
+    </div>
   </div>
 </Admin>
 
+<script>
+  // The banner switch saves as soon as it's flipped.
+  for (const el of document.querySelectorAll<HTMLElement>('[data-autosubmit-check]')) {
+    if (el instanceof HTMLInputElement) el.addEventListener('change', () => el.form?.requestSubmit());
+  }
+</script>
+
 <style>
-  .activity {
+  .year {
+    border-color: var(--ink);
+  }
+  .progress {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    height: 6px;
+    background: var(--grey-100);
+  }
+  .progress .on {
+    background: #ffd400;
+  }
+  .checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .checklist li {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    max-width: 440px;
+  }
+  .checklist .done .label {
+    color: var(--grey-600);
+  }
+  .tick {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--grey-600);
+    background: var(--white);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .done .tick {
+    border-color: var(--ink);
+    background: #ffd400;
+  }
+  .table.bare th:first-child,
+  .table.bare td:first-child {
+    width: auto;
+  }
+  .table.bare .story-cell strong {
+    font-size: 15px;
+  }
+  .lead {
+    display: grid;
+    grid-template-columns: 192px 1fr auto;
+    align-items: center;
+    gap: 20px;
+  }
+  .lead-photo {
+    width: 192px;
+    height: 108px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .lead-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .lead-text strong {
+    font-size: 20px;
+    line-height: 26px;
+    letter-spacing: -0.02em;
+  }
+  .list {
     display: flex;
     flex-direction: column;
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .activity li {
-    display: flex;
-    flex-direction: column;
-    padding-block: 10px;
+  .list li {
+    padding-block: 14px;
     border-top: 1px solid var(--grey-300);
   }
-  .activity li:first-child {
-    border-top: 0;
-    padding-top: 0;
+  .letter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .letter a {
+    line-height: 22px;
+  }
+  .letter a:hover {
+    text-decoration: underline;
+  }
+  .event {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .event .text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .event .text span {
+    font-size: 13px;
+    color: var(--grey-600);
+  }
+  .hide-on-phone {
+    display: none;
+  }
+  @media (max-width: 1023px) {
+    .first-on-phone {
+      order: -1;
+    }
+  }
+  @media (max-width: 1023px) {
+    .columns.main-side {
+      display: flex;
+      flex-direction: column-reverse;
+    }
+  }
+  @media (min-width: 768px) {
+    .hide-on-phone {
+      display: flex;
+    }
   }
 </style>
