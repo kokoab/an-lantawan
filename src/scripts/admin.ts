@@ -1,8 +1,20 @@
 /** Small behaviours shared by every admin page. */
 
-// The side menu starts closed on phones, where it sits above the page.
-const menu = document.querySelector<HTMLDetailsElement>('.admin-menu');
-if (menu && window.matchMedia('(max-width: 1023px)').matches) menu.open = false;
+// On phones the sidebar is a full-screen menu opened from the bar at the top.
+const side = document.getElementById('admin-side');
+const menuButton = document.querySelector<HTMLButtonElement>('[data-admin-menu]');
+const menuClose = document.querySelector<HTMLButtonElement>('[data-admin-menu-close]');
+const setMenu = (open: boolean) => {
+  side?.classList.toggle('open', open);
+  menuButton?.setAttribute('aria-expanded', String(open));
+  if (open) menuClose?.focus();
+  else menuButton?.focus();
+};
+menuButton?.addEventListener('click', () => setMenu(true));
+menuClose?.addEventListener('click', () => setMenu(false));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && side?.classList.contains('open')) setMenu(false);
+});
 
 // Buttons that archive, delete or overwrite ask first. The question names what will happen.
 document.addEventListener('click', (event) => {

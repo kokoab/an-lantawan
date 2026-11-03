@@ -64,7 +64,7 @@ const edited = editing ? prompts.find((p) => p.id === editing) : null;
 const v = (k: string, fallback: string) => (values[k] as string | undefined) ?? fallback;
 ---
 
-<Admin title="Sumat prompts" section="prompts" back={{ label: 'Sumat inbox', href: '/admin/sumat' }}>
+<Admin title="Sumat prompts" section="sumat" back={{ label: 'Sumat inbox', href: '/admin/sumat' }}>
   <a slot="actions" class="btn btn-secondary" href="/sumat" target="_blank" rel="noopener">View Sumat</a>
   <div class="columns main-side">
     <div>

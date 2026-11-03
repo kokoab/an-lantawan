@@ -8,7 +8,7 @@ import {
   listPeopleChoices,
   listSchoolYears,
   removeStaffTerm,
-} from '../../../db/queries/admin/people';
+} from '../../../db/queries/admin/staff';
 import Admin from '../../../layouts/Admin.astro';
 import { doneRedirect, editorOf, one, readForm, record } from '../../../lib/admin';
 import { staffTermForm } from '../../../lib/admin-schemas';
@@ -19,7 +19,7 @@ const currentYear =
   new Date().getMonth() >= 7 ? `${thisYear}–${thisYear + 1}` : `${thisYear - 1}–${thisYear}`;
 const asked = schoolYearField.safeParse(Astro.url.searchParams.get('year') ?? '');
 const year = asked.success ? asked.data : currentYear;
-const here = `/admin/people/board?year=${encodeURIComponent(year)}`;
+const here = `/admin/staff/board?year=${encodeURIComponent(year)}`;
 
 let values: Record<string, unknown> = { schoolYear: year, sort: '0' };
 let errors: Record<string, string> = {};
@@ -50,7 +50,7 @@ if (Astro.request.method === 'POST') {
     });
     return doneRedirect(
       Astro,
-      `/admin/people/board?year=${encodeURIComponent(parsed.data.schoolYear)}`,
+      `/admin/staff/board?year=${encodeURIComponent(parsed.data.schoolYear)}`,
       'saved',
     );
   }
@@ -66,7 +66,7 @@ const [members, years, people] = await Promise.all([
 const yearChoices = [...new Set([currentYear, ...years, year])].sort().reverse();
 ---
 
-<Admin title="Editorial board" section="people" back={{ label: 'People', href: '/admin/people' }}>
+<Admin title="Editorial board" section="staff" back={{ label: 'People', href: '/admin/staff' }}>
   <a slot="actions" class="btn btn-secondary" href="/about#editorial-board" target="_blank" rel="noopener">View on site</a>
   <form class="toolbar" method="get">
     <div class="field narrow">
@@ -101,7 +101,7 @@ const yearChoices = [...new Set([currentYear, ...years, year])].sort().reverse()
                   <td class="num">{m.sort}</td>
                   <td>{m.position}</td>
                   <th scope="row">
-                    <a href={`/admin/people/${m.personId}`}>{m.name}</a>
+                    <a href={`/admin/staff/${m.personId}`}>{m.name}</a>
                   </th>
                   <td class="actions">
                     <form method="post">

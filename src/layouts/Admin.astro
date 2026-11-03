@@ -1,9 +1,11 @@
 ---
-/** Every admin page: the side menu, the page title with its actions, and change notices. */
-import { count, eq } from 'drizzle-orm';
-import Torch from '../components/Torch.astro';
+/** Every admin page: the sidebar (a menu on phones), the page title with its actions, and notices. */
+import { and, count, eq } from 'drizzle-orm';
+import CloseIcon from '../assets/icons/admin/close.svg';
+import SignOutIcon from '../assets/icons/admin/sign-out.svg';
+import AdminBrand from '../components/admin/AdminBrand.astro';
 import { db } from '../db/client';
-import { sumatMessages } from '../db/schema';
+import { events, sportsfests, sumatMessages } from '../db/schema';
 import { doneMessage, editorOf } from '../lib/admin';
 import '../styles/site.css';
 import '../styles/admin.css';
@@ -11,57 +13,50 @@ import '../styles/admin.css';
 interface Props {
   title: string;
   /** Which menu entry to mark. */
-  section: string;
+  section:
+    | 'overview'
+    | 'stories'
+    | 'home'
+    | 'sumat'
+    | 'sportsfest'
+    | 'print'
+    | 'staff'
+    | 'settings';
+  /** The line under the title: a date, a count, “Draft, saved at 2:41 PM”. */
+  subtitle?: string | null;
   /** A link back up, shown above the title. */
   back?: { label: string; href: string };
 }
 
-const { title, section, back } = Astro.props;
+const { title, section, subtitle, back } = Astro.props;
 const editor = editorOf(Astro);
 const notice = doneMessage(Astro.url);
-const [{ unread }] = await db
-  .select({ unread: count() })
-  .from(sumatMessages)
-  .where(eq(sumatMessages.status, 'new'));
+const [[{ unread }], [{ ongoing }]] = await Promise.all([
+  db.select({ unread: count() }).from(sumatMessages).where(eq(sumatMessages.status, 'new')),
+  db
+    .select({ ongoing: count() })
+    .from(events)
+    .innerJoin(sportsfests, eq(sportsfests.id, events.sportsfestId))
+    .where(and(eq(events.status, 'ongoing'), eq(sportsfests.status, 'ongoing'))),
+]);
 
 const MENU = [
+  { id: 'overview', label: 'Overview', href: '/admin' },
+  { id: 'stories', label: 'Stories', href: '/admin/stories' },
+  { id: 'home', label: 'Home', href: '/admin/home' },
+  { id: 'sumat', label: 'Sumat', href: '/admin/sumat', badge: unread ? `${unread} new` : null },
   {
-    label: 'Publishing',
-    items: [
-      { id: 'dashboard', label: 'Overview', href: '/admin' },
-      { id: 'stories', label: 'Stories', href: '/admin/stories' },
-      { id: 'media', label: 'Photos and files', href: '/admin/media' },
-      { id: 'print', label: 'Print issues', href: '/admin/print' },
-      { id: 'people', label: 'People', href: '/admin/people' },
-    ],
-  },
-  {
-    label: 'Readers',
-    items: [
-      { id: 'sumat', label: 'Sumat inbox', href: '/admin/sumat', count: unread },
-      { id: 'prompts', label: 'Sumat prompts', href: '/admin/sumat/prompts' },
-    ],
-  },
-  {
+    id: 'sportsfest',
     label: 'Sportsfest',
-    items: [
-      { id: 'sportsfest', label: 'Sportsfests', href: '/admin/sportsfest' },
-      { id: 'tribus', label: 'Tribus', href: '/admin/sportsfest/tribus' },
-    ],
+    href: '/admin/sportsfest',
+    badge: ongoing ? `${ongoing} ongoing` : null,
   },
-  {
-    label: 'Site',
-    items: [
-      { id: 'settings', label: 'Site text', href: '/admin/settings' },
-      { id: 'sections', label: 'Sections', href: '/admin/sections' },
-      { id: 'menus', label: 'Menus', href: '/admin/menus' },
-      { id: 'redirects', label: 'Redirects', href: '/admin/redirects' },
-      { id: 'editors', label: 'Editors', href: '/admin/editors' },
-      { id: 'activity', label: 'Activity', href: '/admin/activity' },
-    ],
-  },
+  { id: 'print', label: 'Print issues', href: '/admin/print' },
+  { id: 'staff', label: 'Staff', href: '/admin/staff' },
+  { id: 'settings', label: 'Site settings', href: '/admin/settings' },
 ];
-const currentLabel = MENU.flatMap((g) => g.items).find((i) => i.id === section)?.label ?? 'Menu';
+const who = editor.person?.name ?? editor.name;
+const switchHref = `/admin/who?next=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`;
 ---
 
 <!doctype html>
@@ -76,59 +71,53 @@ const currentLabel = MENU.flatMap((g) => g.items).find((i) => i.id === section)?
   <body class="admin">
     <a class="skip-link" href="#main">Skip to content</a>
     <div class="admin-shell">
-      <aside class="admin-side">
-        <a class="admin-brand" href="/admin">
-          <Torch />
-          <span>An Lantawan</span>
-        </a>
-        <details class="admin-menu" open>
-          <summary>{currentLabel}</summary>
-          <nav aria-label="Admin">
+      <header class="admin-bar">
+        <AdminBrand href="/admin" />
+        <button class="admin-bar-menu" type="button" aria-expanded="false" aria-controls="admin-side" data-admin-menu>
+          Menu
+        </button>
+      </header>
+
+      <aside class="admin-side" id="admin-side" aria-label="Admin">
+        <div class="admin-side-head">
+          <AdminBrand href="/admin" />
+          <button class="admin-side-close" type="button" aria-label="Close the menu" data-admin-menu-close><CloseIcon /></button>
+        </div>
+        <nav>
+          <ul>
             {
-              MENU.map((g) => (
-                <div class="admin-menu-group">
-                  <p>{g.label}</p>
-                  <ul>
-                    {g.items.map((i) => (
-                      <li>
-                        <a href={i.href} aria-current={i.id === section ? 'page' : undefined}>
-                          {i.label}
-                          {'count' in i && (i.count ?? 0) > 0 && (
-                            <span class="admin-count">
-                              {i.count}
-                              <span class="visually-hidden"> new</span>
-                            </span>
-                          )}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              MENU.map((i) => (
+                <li>
+                  <a href={i.href} aria-current={i.id === section ? 'page' : undefined}>
+                    <span>{i.label}</span>
+                    {i.badge && <span class="tag sun">{i.badge}</span>}
+                  </a>
+                </li>
               ))
             }
-          </nav>
-        </details>
-        <div class="admin-me">
-          <p>
-            <strong>{editor.name}</strong>
-            <span>{editor.email}</span>
-          </p>
-          <div class="admin-me-links">
-            <a href="/" target="_blank" rel="noopener">View site</a>
-            <form method="post" action="/auth/signout">
-              <button type="submit">Sign out</button>
-            </form>
+          </ul>
+        </nav>
+        <div class="admin-account">
+          <p class="muted">Editing as</p>
+          <p class="who">{who}</p>
+          <div class="admin-account-links">
+            <a href={switchHref}>Switch person</a>
+            <a class="phone-only" href="/" target="_blank" rel="noopener">View the site</a>
           </div>
+          <form method="post" action="/auth/signout" class="phone-only">
+            <button class="btn btn-secondary" type="submit"><SignOutIcon /> Sign out</button>
+          </form>
         </div>
       </aside>
 
       <main class="admin-main" id="main">
         <header class="admin-head">
-          <div>
+          <div class="admin-title">
             {back && <a class="admin-back" href={back.href}>{back.label}</a>}
             <h1>{title}</h1>
+            {subtitle && <p>{subtitle}</p>}
           </div>
-          <div class="admin-actions"><slot name="actions" /></div>
+          {Astro.slots.has('actions') && <div class="admin-actions"><slot name="actions" /></div>}
         </header>
         {
           notice && (
@@ -140,6 +129,7 @@ const currentLabel = MENU.flatMap((g) => g.items).find((i) => i.id === section)?
         <slot />
       </main>
     </div>
+    <slot name="dialogs" />
     <script>
       import '../scripts/admin';
     </script>

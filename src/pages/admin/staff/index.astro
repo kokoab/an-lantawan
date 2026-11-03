@@ -3,7 +3,7 @@ import Field from '../../../components/admin/Field.astro';
 import PersonForm from '../../../components/admin/PersonForm.astro';
 import { parseForm } from '../../../core/forms';
 import { db } from '../../../db/client';
-import { createPerson, listPeople, personSlugTaken } from '../../../db/queries/admin/people';
+import { createPerson, listPeople, personSlugTaken } from '../../../db/queries/admin/staff';
 import Admin from '../../../layouts/Admin.astro';
 import { editorOf, readFormWithFiles, record } from '../../../lib/admin';
 import { personForm } from '../../../lib/admin-schemas';
@@ -37,7 +37,7 @@ if (Astro.request.method === 'POST') {
           entityId: id,
           summary: `Added ${parsed.data.name}`,
         });
-        return Astro.redirect(`/admin/people/${id}?done=created`, 303);
+        return Astro.redirect(`/admin/staff/${id}?done=created`, 303);
       }
     }
   } else errors = parsed.errors;
@@ -49,8 +49,8 @@ const archived = Astro.url.searchParams.get('show') === 'archived';
 const rows = await listPeople(db, { q, archived });
 ---
 
-<Admin title="People" section="people">
-  <a slot="actions" class="btn btn-secondary" href="/admin/people/board">Editorial board</a>
+<Admin title="People" section="staff">
+  <a slot="actions" class="btn btn-secondary" href="/admin/staff/board">Editorial board</a>
   <div class="columns main-side">
     <div>
       <form class="toolbar" method="get" role="search">
@@ -89,7 +89,7 @@ const rows = await listPeople(db, { q, archived });
                       {p.photoKey ? <img class="thumb" src={mediaUrl(p.photoKey)} alt="" loading="lazy" /> : <span class="thumb" />}
                     </td>
                     <th scope="row">
-                      <a href={`/admin/people/${p.id}`}>{p.name}</a>
+                      <a href={`/admin/staff/${p.id}`}>{p.name}</a>
                     </th>
                     <td class="num">{p.stories}</td>
                   </tr>

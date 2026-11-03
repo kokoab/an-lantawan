@@ -1,7 +1,7 @@
 import type { Db } from '../db/client';
 import { getMediaByIds } from '../db/queries/admin/media';
-import { listPeopleChoices } from '../db/queries/admin/people';
 import { listAllSections } from '../db/queries/admin/sections';
+import { listPeopleChoices } from '../db/queries/admin/staff';
 import { listEventChoices } from '../db/queries/admin/stories';
 
 /** The choices every story form needs: sections, people to credit and Sportsfest events. */

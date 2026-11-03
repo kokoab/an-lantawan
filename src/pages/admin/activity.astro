@@ -12,7 +12,7 @@ const { rows, pages } = await listActivity(db, { editorId, page, perPage: 50 });
 const LINK: Record<string, (id: number) => string> = {
   story: (id) => `/admin/stories/${id}`,
   media: (id) => `/admin/media/${id}`,
-  person: (id) => `/admin/people/${id}`,
+  person: (id) => `/admin/staff/${id}`,
   issue: (id) => `/admin/print/${id}`,
   section: (id) => `/admin/sections/${id}`,
   sumat: (id) => `/admin/sumat/${id}`,
@@ -21,7 +21,7 @@ const href = (p: number) =>
   `/admin/activity?${new URLSearchParams({ ...(editorId ? { editor: String(editorId) } : {}), ...(p > 1 ? { page: String(p) } : {}) })}`;
 ---
 
-<Admin title="Activity" section="activity">
+<Admin title="Activity" section="overview">
   <form class="toolbar" method="get">
     <div class="field narrow">
       <label for="f-editor">Editor</label>

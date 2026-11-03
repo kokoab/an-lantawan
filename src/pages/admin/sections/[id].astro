@@ -62,7 +62,7 @@ if (Astro.request.method === 'POST') {
 const parents = (await listParentChoices(db)).filter((p) => p.id !== section.id);
 ---
 
-<Admin title={section.name} section="sections" back={{ label: 'Sections', href: '/admin/sections' }}>
+<Admin title={section.name} section="settings" back={{ label: 'Sections', href: '/admin/sections' }}>
   <a slot="actions" class="btn btn-secondary" href={`/${section.slug}`} target="_blank" rel="noopener">
     View on site
   </a>

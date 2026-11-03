@@ -46,7 +46,7 @@ const tops = all.filter((s) => s.parentId === null);
 const rows = tops.flatMap((t) => [t, ...all.filter((s) => s.parentId === t.id)]);
 ---
 
-<Admin title="Sections" section="sections">
+<Admin title="Sections" section="settings">
   <div class="columns main-side">
     <div class="table-wrap">
       <table class="table">

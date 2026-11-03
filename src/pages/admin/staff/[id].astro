@@ -11,7 +11,7 @@ import {
   removeStaffTerm,
   setPersonArchived,
   updatePerson,
-} from '../../../db/queries/admin/people';
+} from '../../../db/queries/admin/staff';
 import Admin from '../../../layouts/Admin.astro';
 import {
   doneRedirect,
@@ -28,7 +28,7 @@ const editor = editorOf(Astro);
 const id = idParam(Astro.params.id);
 const person = id ? await getPersonById(db, id) : null;
 if (!person) return Astro.rewrite('/404');
-const here = `/admin/people/${person.id}`;
+const here = `/admin/staff/${person.id}`;
 
 let values: Record<string, unknown> = { ...person };
 let errors: Record<string, string> = {};
@@ -93,7 +93,7 @@ const currentYear =
   new Date().getMonth() >= 7 ? `${thisYear}–${thisYear + 1}` : `${thisYear - 1}–${thisYear}`;
 ---
 
-<Admin title={person.name} section="people" back={{ label: 'People', href: '/admin/people' }}>
+<Admin title={person.name} section="staff" back={{ label: 'People', href: '/admin/staff' }}>
   <a slot="actions" class="btn btn-secondary" href={`/people/${person.slug}`} target="_blank" rel="noopener">
     View their page
   </a>

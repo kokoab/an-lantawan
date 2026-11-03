@@ -3,7 +3,7 @@ import Field from '../../../components/admin/Field.astro';
 import { parseForm } from '../../../core/forms';
 import { db } from '../../../db/client';
 import { deleteMedia, getMedia, mediaUsage, updateMedia } from '../../../db/queries/admin/media';
-import { listPeopleChoices } from '../../../db/queries/admin/people';
+import { listPeopleChoices } from '../../../db/queries/admin/staff';
 import Admin from '../../../layouts/Admin.astro';
 import { doneRedirect, editorOf, idParam, one, readForm, record } from '../../../lib/admin';
 import { mediaForm } from '../../../lib/admin-schemas';
@@ -72,7 +72,7 @@ const v = (k: string) => (values[k] ?? '') as string;
 const isImage = file.kind === 'image';
 ---
 
-<Admin title={file.alt || name} section="media" back={{ label: 'Photos and files', href: '/admin/media' }}>
+<Admin title={file.alt || name} section="stories" back={{ label: 'Photos and files', href: '/admin/media' }}>
   <a slot="actions" class="btn btn-secondary" href={mediaUrl(file.key)} target="_blank" rel="noopener">
     Open the file
   </a>
@@ -166,7 +166,7 @@ const isImage = file.kind === 'image';
               ))}
               {usage.people.map((s) => (
                 <li>
-                  Photo of <a href={`/admin/people/${s.id}`}>{s.name}</a>
+                  Photo of <a href={`/admin/staff/${s.id}`}>{s.name}</a>
                 </li>
               ))}
               {usage.tribus.map((s) => (

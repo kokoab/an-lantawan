@@ -63,7 +63,7 @@ if (Astro.request.method === 'POST') {
 const list = await listEditors(db);
 ---
 
-<Admin title="Editors" section="editors">
+<Admin title="Editors" section="settings">
   {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
   <div class="columns main-side">
     <div class="table-wrap">
