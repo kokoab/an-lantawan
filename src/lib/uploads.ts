@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { imageSize } from 'image-size';
-import { checkUpload, MAX_BYTES, type MediaKind, uploadKey } from '../core/media';
+import { checkUpload, MAX_BYTES, type MediaKind, pdfPageCount, uploadKey } from '../core/media';
 import type { Db } from '../db/client';
 import { insertMedia } from '../db/queries/admin/media';
 
@@ -22,7 +22,7 @@ export async function storeUpload(
   file: File,
   editorId: number,
   options: { want?: MediaKind; alt?: string | null; caption?: string | null } = {},
-): Promise<{ ok: true; media: Stored } | { ok: false; error: string }> {
+): Promise<{ ok: true; media: Stored; pages: number | null } | { ok: false; error: string }> {
   if (file.size > MAX_BYTES.pdf)
     return { ok: false, error: 'That file is too big. Keep PDFs under 50 MB.' };
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -52,7 +52,7 @@ export async function storeUpload(
     caption: options.caption ?? null,
     uploadedBy: editorId,
   });
-  return { ok: true, media: row };
+  return { ok: true, media: row, pages: check.type.kind === 'pdf' ? pdfPageCount(bytes) : null };
 }
 
 /** Removes a file from R2. Its database row is deleted separately, once nothing uses it. */

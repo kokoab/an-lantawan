@@ -26,17 +26,19 @@ export const GET: APIRoute = async ({ url }) => {
   });
 };
 
-/** Uploads one photo from the story editor. */
+/** Uploads one photo from the story editor, or a print issue's PDF while its form is filled in. */
 export const POST: APIRoute = async (context) => {
   const editor = editorOf(context);
   const form = await context.request.formData().catch(() => null);
   const file = form?.get('file');
+  const want = form?.get('kind') === 'pdf' ? 'pdf' : 'image';
   if (!(file instanceof File)) {
-    return Response.json({ ok: false, error: 'Choose a photo to upload.' }, { status: 400 });
+    const error = want === 'pdf' ? 'Choose the PDF to upload.' : 'Choose a photo to upload.';
+    return Response.json({ ok: false, error }, { status: 400 });
   }
   const alt = optionalText(300).safeParse(String(form?.get('alt') ?? ''));
   const stored = await storeUpload(db, file, editor.id, {
-    want: 'image',
+    want,
     alt: alt.success ? alt.data : null,
   });
   if (!stored.ok) return Response.json({ ok: false, error: stored.error }, { status: 422 });
@@ -56,6 +58,8 @@ export const POST: APIRoute = async (context) => {
       caption: m.caption ?? '',
       width: m.width,
       height: m.height,
+      bytes: m.bytes,
+      pages: stored.pages,
     },
   });
 };
