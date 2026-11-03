@@ -1,6 +1,5 @@
 ---
 /** The newest story of a list, shown large above the grid. */
-import { leadShape } from '../../core/content/photo';
 import type { StorySummary } from '../../db/queries/stories';
 import { formatDate, isoDate } from '../../lib/format';
 import { storyLabel, storyUrl } from '../../lib/urls';
@@ -13,28 +12,19 @@ interface Props {
 const { story } = Astro.props;
 const label = storyLabel(story);
 const href = storyUrl(story);
-const shape = story.cover ? leadShape(story.cover.width, story.cover.height) : null;
 ---
 
 <section class="band framed lead" aria-labelledby="lead-title">
-  <div class:list={['inner', shape ? `is-${shape.layout}` : 'no-photo']}>
-    {
-      shape && (
-        <a class="lead-photo-link" href={href} tabindex="-1" aria-hidden="true">
-          <StoryPhoto cover={story.cover} class={`lead-photo r-${shape.ratio}`} eager fitted />
-        </a>
-      )
-    }
+  <div class="inner">
+    <a class="lead-photo-link" href={href} tabindex="-1" aria-hidden="true">
+      <StoryPhoto cover={story.cover} class="lead-photo" eager />
+    </a>
     <div class="text">
-      <div class="group">
-        <span class="pill">{label}</span>
-        <h2 id="lead-title"><a href={href}>{story.title}</a></h2>
-      </div>
-      <div class="group">
-        {story.dek && <p class="dek">{story.dek}</p>}
-        <time datetime={isoDate(story.publishedAt)}>{formatDate(story.publishedAt)}</time>
-        <a class="btn btn-primary read" href={href}>Read the story</a>
-      </div>
+      <span class="pill">{label}</span>
+      <h2 id="lead-title"><a href={href}>{story.title}</a></h2>
+      {story.dek && <p class="dek">{story.dek}</p>}
+      <time datetime={isoDate(story.publishedAt)}>{formatDate(story.publishedAt)}</time>
+      <a class="btn btn-primary read" href={href}>Read the story</a>
     </div>
   </div>
 </section>
@@ -50,41 +40,13 @@ const shape = story.cover ? leadShape(story.cover.width, story.cover.height) : n
   }
   .lead :global(.lead-photo) {
     width: 100%;
+    aspect-ratio: 342 / 220;
   }
-  /* The frame takes the picture's own shape, so nothing is letterboxed. */
-  .lead :global(.r-4x3) {
-    aspect-ratio: 4 / 3;
-  }
-  .lead :global(.r-3x2) {
-    aspect-ratio: 3 / 2;
-  }
-  .lead :global(.r-16x9) {
-    aspect-ratio: 16 / 9;
-  }
-  .lead :global(.r-2x1) {
-    aspect-ratio: 2 / 1;
-  }
-  .lead :global(.r-1x1) {
-    aspect-ratio: 1;
-  }
-  .lead :global(.r-4x5) {
-    aspect-ratio: 4 / 5;
-  }
-  .lead :global(.r-3x4) {
-    aspect-ratio: 3 / 4;
-  }
-  .lead :global(.r-2x3) {
-    aspect-ratio: 2 / 3;
-  }
-  .text,
-  .group {
+  .text {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
-  }
-  .group {
-    align-self: stretch;
   }
   h2 {
     margin: 0;
@@ -126,21 +88,14 @@ const shape = story.cover ? leadShape(story.cover.width, story.cover.height) : n
       align-items: flex-start;
       gap: 48px;
     }
-    .is-wide .lead-photo-link {
+    .lead-photo-link {
       flex: 0 0 calc((100% - 48px) * 768 / 1168);
     }
-    /* Square and tall pictures take less width, so they don't tower over the text. */
-    .is-side {
-      align-items: center;
-    }
-    .is-side .lead-photo-link {
-      flex: 0 0 calc((100% - 48px) * 5 / 12);
+    .lead :global(.lead-photo) {
+      aspect-ratio: 16 / 9;
     }
     .text {
       flex: 1;
-    }
-    .text,
-    .group {
       gap: 20px;
     }
     h2 {
