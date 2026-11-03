@@ -1,0 +1,22 @@
+---
+/** A month and year, as YYYY-MM: from next month back to January 2000, plus the current value. */
+import { formatMonth } from '../../lib/format';
+
+interface Props {
+  name: string;
+  id: string;
+  value: string;
+}
+const { name, id, value } = Astro.props;
+const now = new Date();
+// Months counted from year 0, so stepping back a month is just subtracting one.
+const months: string[] = [];
+for (let i = now.getFullYear() * 12 + now.getMonth() + 1; i >= 2000 * 12; i--) {
+  months.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`);
+}
+if (value && !months.includes(value)) months.push(value);
+---
+
+<select id={id} name={name}>
+  {months.map((m) => <option value={m} selected={m === value}>{formatMonth(`${m}-01`)}</option>)}
+</select>

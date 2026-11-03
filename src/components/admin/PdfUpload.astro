@@ -1,0 +1,102 @@
+---
+/**
+ * A print issue's PDF. Picking a file uploads it straight away with a progress bar, so the
+ * rest of the form can be filled in meanwhile; the form then sends only the file's ID.
+ * Without scripts the file goes with the form instead. See src/scripts/admin-print.ts.
+ */
+import UploadIcon from '../../assets/icons/admin/upload.svg';
+import { uploadName } from '../../core/media';
+import { formatBytes } from '../../lib/format';
+
+interface Props {
+  id: string;
+  current: { key: string; bytes: number } | null;
+  /** A PDF already uploaded for this form, when the form comes back with something to fix. */
+  uploaded?: { id: number; key: string; bytes: number } | null;
+  error?: string;
+}
+const { id, current, uploaded = null, error } = Astro.props;
+const shown = uploaded ?? current;
+---
+
+<div class="pdf-upload" data-pdf-upload>
+  <input type="hidden" name="pdfId" value={uploaded?.id ?? ''} data-pdf-id />
+  <input id={id} type="file" name="pdf" accept="application/pdf" class="visually-hidden" data-pdf-file />
+  <label class="drop" for={id} hidden={shown !== null} data-pdf-drop>
+    <UploadIcon />
+    <strong>Upload the PDF</strong>
+    <span class="muted small">A PDF up to 50 MB.</span>
+  </label>
+  <div class="box" hidden={shown === null} data-pdf-box>
+    <div class="line">
+      <strong data-pdf-name>{shown && uploadName(shown.key)}</strong>
+      <label class="link-button" for={id} data-pdf-replace>Replace</label>
+      <button class="link-button" type="button" hidden data-pdf-cancel>Cancel</button>
+    </div>
+    <progress max="100" value="0" hidden data-pdf-progress></progress>
+    <span class="muted small" data-pdf-status>{shown ? `${formatBytes(shown.bytes)}${uploaded ? '. Uploaded.' : ''}` : ''}</span>
+  </div>
+  <p class="field-error" hidden={!error} data-pdf-error>{error}</p>
+</div>
+
+<style>
+  .pdf-upload {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 18px 16px;
+    border: 1px dashed var(--grey-600);
+    background: var(--grey-50);
+    text-align: center;
+    cursor: pointer;
+  }
+  .box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .line strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 15px;
+  }
+  .line .link-button {
+    flex: none;
+    cursor: pointer;
+  }
+  progress {
+    width: 100%;
+    height: 6px;
+    border: 0;
+    background: var(--grey-100);
+    appearance: none;
+  }
+  progress::-webkit-progress-bar {
+    background: var(--grey-100);
+  }
+  progress::-webkit-progress-value {
+    background: #ffd400;
+  }
+  progress::-moz-progress-bar {
+    background: #ffd400;
+  }
+  .pdf-upload:has(input[type='file']:focus-visible) :is(.drop, .box) {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+</style>
