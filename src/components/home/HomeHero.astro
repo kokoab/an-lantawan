@@ -10,10 +10,12 @@ import StoryPhoto from '../stories/StoryPhoto.astro';
 interface Props {
   lead: StorySummary;
   minutes: number | null;
+  /** The summary, or the first paragraph when there isn't one. */
+  excerpt: string | null;
   latest: StorySummary[];
 }
 
-const { lead, minutes, latest } = Astro.props;
+const { lead, minutes, excerpt, latest } = Astro.props;
 const href = storyUrl(lead);
 const isExplainer = lead.kind === 'explainer';
 // The frame takes the photo's own shape, so no grey bars show beside it.
@@ -32,7 +34,7 @@ const shape = lead.cover ? leadShape(lead.cover.width, lead.cover.height) : null
     <div class="text">
       <span class="pill">{storyLabel(lead)}</span>
       <h1><a href={href}>{lead.title}</a></h1>
-      {lead.dek && <p class="dek">{lead.dek}</p>}
+      {excerpt && <p class="dek">{excerpt}</p>}
       <p class="meta">
         <time datetime={isoDate(lead.publishedAt)}>{formatDate(lead.publishedAt)}</time>
         {minutes && <span>{minutes}-minute read</span>}

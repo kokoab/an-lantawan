@@ -20,7 +20,7 @@ const [home, prompt, opinionSection, copy] = await Promise.all([
 ---
 
 <Site title="An Lantawan">
-  {home.lead && <HomeHero lead={home.lead} minutes={home.leadMinutes} latest={home.latest} />}
+  {home.lead && <HomeHero lead={home.lead} minutes={home.leadMinutes} excerpt={home.leadExcerpt} latest={home.latest} />}
   {
     prompt && (
       <HomeSumat

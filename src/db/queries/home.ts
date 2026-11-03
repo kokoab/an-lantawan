@@ -1,5 +1,6 @@
 import { eq, inArray } from 'drizzle-orm';
 import type { Doc } from '../../core/content/doc';
+import { leadExcerpt } from '../../core/content/excerpt';
 import { readingMinutes } from '../../core/content/reading';
 import type { Db } from '../client';
 import { stories } from '../schema';
@@ -50,6 +51,7 @@ export async function getHomepage(db: Db) {
   return {
     lead,
     leadMinutes: leadBody ? readingMinutes(leadBody as Doc) : null,
+    leadExcerpt: lead ? leadExcerpt(lead.dek, (leadBody as Doc | null) ?? null) : null,
     latest,
     more,
     opinion: opinion.map((s) => ({ ...s, writers: writers.get(s.id) ?? [] })),
