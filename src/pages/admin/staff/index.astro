@@ -1,119 +1,464 @@
 ---
-import Field from '../../../components/admin/Field.astro';
-import PersonForm from '../../../components/admin/PersonForm.astro';
-import { parseForm } from '../../../core/forms';
+import CheckIcon from '../../../assets/icons/admin/check.svg';
+import CloseIcon from '../../../assets/icons/admin/close.svg';
+import PlusIcon from '../../../assets/icons/admin/plus.svg';
+import UploadIcon from '../../../assets/icons/admin/upload.svg';
+import { parseForm, schoolYear as schoolYearField } from '../../../core/forms';
+import { boardOrder, initials, schoolYearOf } from '../../../core/people';
 import { db } from '../../../db/client';
-import { createPerson, listPeople, personSlugTaken } from '../../../db/queries/admin/staff';
+import {
+  addStaffTerm,
+  createPerson,
+  findPersonByName,
+  freePersonSlug,
+  getPersonById,
+  listPositions,
+  listSchoolYears,
+  listStaffYear,
+  removeStaffTerm,
+  updatePerson,
+  updateStaffTerm,
+} from '../../../db/queries/admin/staff';
 import Admin from '../../../layouts/Admin.astro';
-import { editorOf, readFormWithFiles, record } from '../../../lib/admin';
-import { personForm } from '../../../lib/admin-schemas';
+import { doneRedirect, editorOf, one, readFormWithFiles, record } from '../../../lib/admin';
+import { staffAddForm, staffEditForm } from '../../../lib/admin-schemas';
 import { resolveUpload } from '../../../lib/uploads';
 import { mediaUrl } from '../../../lib/urls';
 
 const editor = editorOf(Astro);
-let values: Record<string, unknown> = {};
-let errors: Record<string, string> = {};
+const currentYear = schoolYearOf(new Date());
+const asked = schoolYearField.safeParse(Astro.url.searchParams.get('year') ?? '');
+const year = asked.success ? asked.data : currentYear;
+const here = `/admin/staff?year=${encodeURIComponent(year)}`;
+
+let addValues: Record<string, unknown> = { onBoard: 'on' };
+let addErrors: Record<string, string> = {};
+let editValues: Record<string, unknown> | null = null;
+let editErrors: Record<string, string> = {};
+let addOpen = false;
 
 if (Astro.request.method === 'POST') {
   const form = await readFormWithFiles(Astro.request);
-  values = form.values;
-  const parsed = parseForm(personForm, form.values);
-  if (parsed.ok) {
-    if (await personSlugTaken(db, parsed.data.slug, null))
-      errors.slug = 'Someone else has this URL name.';
+  const intent = one(form.values, 'intent');
+
+  if (intent === 'add') {
+    addValues = form.values;
+    addOpen = true;
+    const parsed = parseForm(staffAddForm, form.values);
+    if (!parsed.ok) addErrors = parsed.errors;
     else {
+      const d = parsed.data;
+      // Someone from an earlier year keeps their page and bylines; they just get this year's role.
+      const existingId = await findPersonByName(db, d.name);
+      const existing = existingId ? await getPersonById(db, existingId) : null;
+      if (existing?.terms.some((t) => t.schoolYear === year && t.position === d.position)) {
+        addErrors.name = `${existing.name} is already on the ${year} staff as ${d.position}.`;
+      } else {
+        const photo = await resolveUpload(
+          db,
+          { name: 'photo', current: existing?.photoId ?? null, want: 'image', alt: d.name },
+          form,
+          editor.id,
+        );
+        if (!photo.ok) addErrors.photo = photo.error;
+        else {
+          let personId: number;
+          if (existing) {
+            personId = existing.id;
+            await updatePerson(db, existing.id, {
+              name: existing.name,
+              slug: existing.slug,
+              bio: d.bio ?? existing.bio,
+              photoId: photo.id,
+              canEdit: existing.canEdit || d.canEdit,
+            });
+          } else {
+            personId = await createPerson(db, {
+              name: d.name,
+              slug: await freePersonSlug(db, d.name),
+              bio: d.bio,
+              photoId: photo.id,
+              canEdit: d.canEdit,
+            });
+          }
+          await addStaffTerm(db, {
+            personId,
+            schoolYear: year,
+            position: d.position,
+            sort: 0,
+            onBoard: d.onBoard,
+          });
+          await record(editor, {
+            action: 'create',
+            entityType: 'person',
+            entityId: personId,
+            summary: `Added ${d.name} to the ${year} staff as ${d.position}`,
+          });
+          return doneRedirect(Astro, `${here}&edit=${personId}`, 'created');
+        }
+      }
+    }
+  } else if (intent === 'save' || intent === 'remove') {
+    const personId = Number(one(form.values, 'personId'));
+    const person = Number.isInteger(personId) ? await getPersonById(db, personId) : null;
+    if (!person) return Astro.redirect(here, 303);
+    const termId = Number(one(form.values, 'termId'));
+    const term = person.terms.find((t) => t.id === termId && t.schoolYear === year);
+
+    if (intent === 'remove' && term) {
+      await removeStaffTerm(db, person.id, term.id);
+      await record(editor, {
+        action: 'update',
+        entityType: 'person',
+        entityId: person.id,
+        summary: `Removed ${person.name} from the ${year} staff`,
+      });
+      return doneRedirect(Astro, here, 'removed');
+    }
+
+    editValues = { ...form.values, personId: person.id };
+    const parsed = parseForm(staffEditForm, form.values);
+    if (!parsed.ok) editErrors = parsed.errors;
+    else if (!term) editErrors.position = `${person.name} isn’t on the ${year} staff anymore.`;
+    else if (person.id === editor.person?.id && person.canEdit && !parsed.data.canEdit) {
+      editErrors.canEdit = 'You can’t take away your own admin access. Ask another editor to.';
+    } else {
+      const d = parsed.data;
       const photo = await resolveUpload(
         db,
-        { name: 'photo', current: null, want: 'image', alt: parsed.data.name },
+        { name: 'photo', current: person.photoId, want: 'image', alt: d.name },
         form,
         editor.id,
       );
-      if (!photo.ok) errors.photo = photo.error;
+      if (!photo.ok) editErrors.photo = photo.error;
       else {
-        const id = await createPerson(db, { ...parsed.data, photoId: photo.id });
-        await record(editor, {
-          action: 'create',
-          entityType: 'person',
-          entityId: id,
-          summary: `Added ${parsed.data.name}`,
+        await updatePerson(db, person.id, {
+          name: d.name,
+          slug: person.slug,
+          bio: d.bio,
+          photoId: photo.id,
+          hasProfile: d.hasProfile,
+          canEdit: d.canEdit,
         });
-        return Astro.redirect(`/admin/staff/${id}?done=created`, 303);
+        await updateStaffTerm(db, person.id, term.id, { position: d.position, onBoard: d.onBoard });
+        await record(editor, {
+          action: 'update',
+          entityType: 'person',
+          entityId: person.id,
+          summary:
+            person.canEdit !== d.canEdit
+              ? `${d.canEdit ? 'Let' : 'Stopped'} ${d.name} ${d.canEdit ? 'sign in to' : 'signing in to'} the admin`
+              : `Edited ${d.name}`,
+        });
+        return doneRedirect(Astro, `${here}&edit=${person.id}`, 'saved');
       }
     }
-  } else errors = parsed.errors;
+  }
   Astro.response.status = 422;
 }
 
-const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 80);
-const archived = Astro.url.searchParams.get('show') === 'archived';
-const rows = await listPeople(db, { q, archived });
+const [rows, years, positions] = await Promise.all([
+  listStaffYear(db, year),
+  listSchoolYears(db),
+  listPositions(db),
+]);
+const staff = boardOrder(rows);
+// The year after this one too, so next year's staff can be set up before August.
+const next = (y: string) => `${Number(y.slice(0, 4)) + 1}–${Number(y.slice(0, 4)) + 2}`;
+const yearChoices = [...new Set([next(currentYear), currentYear, ...years, year])].sort().reverse();
+const editId = Number(editValues?.personId ?? Astro.url.searchParams.get('edit'));
+const editing = staff.find((s) => s.personId === editId) ?? staff[0] ?? null;
+const ev = (k: string) => {
+  if (editValues) return (editValues[k] ?? '') as string;
+  if (!editing) return '';
+  return String((editing as Record<string, unknown>)[k] ?? '');
+};
+const evOn = (k: 'onBoard' | 'hasProfile' | 'canEdit') =>
+  editValues ? editValues[k] === 'on' : Boolean(editing?.[k]);
+const av = (k: string) => (addValues[k] ?? '') as string;
 ---
 
-<Admin title="People" section="staff">
-  <a slot="actions" class="btn btn-secondary" href="/admin/staff/board">Editorial board</a>
-  <div class="columns main-side">
-    <div>
-      <form class="toolbar" method="get" role="search">
-        <Field name="q" label="Find someone" type="search" value={q} />
-        <div class="field narrow">
-          <label for="f-show">Show</label>
-          <select id="f-show" name="show" data-autosubmit>
-            <option value="">Current</option>
-            <option value="archived" selected={archived}>Archived</option>
-          </select>
-        </div>
-        <button class="btn btn-secondary" type="submit">Find</button>
-      </form>
-      {
-        rows.length === 0 ? (
-          <div class="empty-state">
-            <h2>{q ? 'Nobody by that name' : archived ? 'Nobody archived' : 'No people yet'}</h2>
-            <p>{q ? 'Check the spelling, or add them on the right.' : 'Add writers, photographers and staff on the right.'}</p>
-          </div>
-        ) : (
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <span class="visually-hidden">Photo</span>
-                  </th>
-                  <th scope="col">Name</th>
-                  <th scope="col" class="num">Stories</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr>
-                    <td class="photo-cell">
-                      {p.photoKey ? <img class="thumb" src={mediaUrl(p.photoKey)} alt="" loading="lazy" /> : <span class="thumb" />}
-                    </td>
-                    <th scope="row">
-                      <a href={`/admin/staff/${p.id}`}>{p.name}</a>
-                    </th>
-                    <td class="num">{p.stories}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      }
+<Admin title="Staff" section="staff" subtitle="Bylines, profiles and the editorial board">
+  <button slot="actions" class="btn btn-primary" type="button" data-open-dialog="add-person"><PlusIcon /> Add person</button>
+
+  <form class="year" method="get">
+    <div class="field">
+      <label for="f-year">School year</label>
+      <select id="f-year" name="year" data-autosubmit>
+        {yearChoices.map((y) => <option value={y} selected={y === year}>{y}</option>)}
+      </select>
     </div>
-    <section class="panel">
-      <h2>Add someone</h2>
-      <PersonForm values={values} errors={errors} photo={null} submit="Add person" />
-    </section>
+    <noscript><button class="btn btn-secondary" type="submit">Show</button></noscript>
+  </form>
+
+  <div class="columns main-side">
+    {
+      staff.length === 0 ? (
+        <div class="empty-state">
+          <h2>No staff for {year} yet</h2>
+          <p>Add this year’s editors, writers and adviser. People from earlier years keep their bylines and pages.</p>
+          <button class="btn btn-primary" type="button" data-open-dialog="add-person"><PlusIcon /> Add person</button>
+        </div>
+      ) : (
+        <div class="table-wrap">
+          <table class="table staff">
+            <thead>
+              <tr>
+                <th scope="col"><span class="visually-hidden">Photo</span></th>
+                <th scope="col">Name</th>
+                <th scope="col">On the board</th>
+                <th scope="col"><span class="visually-hidden">Edit</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {staff.map((s) => (
+                <tr class:list={{ on: s.personId === editing?.personId }}>
+                  <td class="photo-cell">
+                    {s.photoKey ? (
+                      <img class="face" src={mediaUrl(s.photoKey)} alt="" loading="lazy" />
+                    ) : (
+                      <span class="face" aria-hidden="true">{initials(s.name)}</span>
+                    )}
+                  </td>
+                  <th scope="row">
+                    <span class="who">
+                      <span class="name">{s.name}</span>
+                      <span class="muted small">{s.position}</span>
+                    </span>
+                  </th>
+                  <td>{s.onBoard ? 'Yes' : 'No'}</td>
+                  <td class="actions">
+                    <a class="link-button" href={`${here}&edit=${s.personId}#edit`} aria-label={`Edit ${s.name}`}>Edit</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    {
+      editing && (
+        <section class="panel" id="edit" aria-labelledby="edit-title">
+          <h2 id="edit-title">Edit person</h2>
+          <form class="form" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="intent" value="save" />
+            <input type="hidden" name="personId" value={editing.personId} />
+            <input type="hidden" name="termId" value={editing.termId} />
+            <div class="photo-row">
+              {editing.photoKey ? <img class="portrait" src={mediaUrl(editing.photoKey)} alt="" /> : <span class="portrait" aria-hidden="true" />}
+              <label class="btn btn-secondary file">
+                <UploadIcon /> <span data-file-label>{editing.photoKey ? 'Replace photo' : 'Upload photo'}</span>
+                <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif" class="visually-hidden" data-file />
+              </label>
+            </div>
+            {editErrors.photo && <p class="field-error">{editErrors.photo}</p>}
+            <div class="field">
+              <label for="e-name">Name</label>
+              <input id="e-name" name="name" type="text" maxlength="80" value={ev('name')} aria-invalid={editErrors.name ? 'true' : undefined} />
+              {editErrors.name && <p class="field-error">{editErrors.name}</p>}
+            </div>
+            <div class="field">
+              <label for="e-position">Role</label>
+              <input id="e-position" name="position" type="text" maxlength="80" list="positions" value={ev('position')} aria-invalid={editErrors.position ? 'true' : undefined} />
+              {editErrors.position && <p class="field-error">{editErrors.position}</p>}
+            </div>
+            <div class="field">
+              <label for="e-bio">Short bio</label>
+              <textarea id="e-bio" name="bio" rows="3" maxlength="600" placeholder="One or two sentences for the profile page.">{ev('bio')}</textarea>
+            </div>
+            <label class="switch">
+              <input type="checkbox" name="onBoard" checked={evOn('onBoard')} />
+              <span class="switch-text"><strong>Show on the editorial board</strong></span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" name="hasProfile" checked={evOn('hasProfile')} />
+              <span class="switch-text">
+                <strong>Has a profile page</strong>
+                <span>Bylines link to the profile. Turn off for people without stories.</span>
+              </span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" name="canEdit" checked={evOn('canEdit')} />
+              <span class="switch-text">
+                <strong>Can sign in to the admin</strong>
+                <span>Adds them to the “Who’s editing?” list.</span>
+              </span>
+            </label>
+            {editErrors.canEdit && <p class="field-error">{editErrors.canEdit}</p>}
+            <button class="btn btn-sunrise wide" type="submit"><CheckIcon /> Save person</button>
+          </form>
+          <form method="post" class="remove">
+            <input type="hidden" name="intent" value="remove" />
+            <input type="hidden" name="personId" value={editing.personId} />
+            <input type="hidden" name="termId" value={editing.termId} />
+            <button class="link-button danger" type="submit" data-confirm={`Remove ${editing.name} from the ${year} staff? Their bylines and page stay.`}>
+              Remove from the {year} staff
+            </button>
+          </form>
+        </section>
+      )
+    }
   </div>
+
+  <datalist id="positions">
+    {positions.map((p) => <option value={p} />)}
+  </datalist>
+
+  <dialog class="dialog" id="add-person" aria-labelledby="add-title" slot="dialogs" data-open={addOpen ? '' : undefined}>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="intent" value="add" />
+      <div class="dialog-head">
+        <div>
+          <h2 id="add-title">Add a person</h2>
+          <p>For the {year} staff.</p>
+        </div>
+        <button type="button" class="dialog-close" aria-label="Close" data-close-dialog><CloseIcon /></button>
+      </div>
+      <div class="form">
+        <div class="drop-row">
+          <span class="portrait small-portrait" aria-hidden="true" data-photo-preview>?</span>
+          <label class="drop">
+            <UploadIcon />
+            <strong data-file-label>Upload a photo</strong>
+            <span class="muted small">Optional. Initials show until there’s a photo.</span>
+            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif" class="visually-hidden" data-file />
+          </label>
+        </div>
+        {addErrors.photo && <p class="field-error">{addErrors.photo}</p>}
+        <div class="row two">
+          <div class="field">
+            <label for="a-name">Name <span class="required">Required</span></label>
+            <input id="a-name" name="name" type="text" maxlength="80" placeholder="Full name" value={av('name')} aria-invalid={addErrors.name ? 'true' : undefined} />
+            {addErrors.name && <p class="field-error">{addErrors.name}</p>}
+          </div>
+          <div class="field">
+            <label for="a-position">Role</label>
+            <input id="a-position" name="position" type="text" maxlength="80" list="positions" placeholder="Pick or type a role" value={av('position')} aria-invalid={addErrors.position ? 'true' : undefined} />
+            {addErrors.position && <p class="field-error">{addErrors.position}</p>}
+          </div>
+        </div>
+        <div class="field">
+          <label for="a-bio">Short bio</label>
+          <textarea id="a-bio" name="bio" rows="3" maxlength="600" placeholder="One or two sentences for the profile page.">{av('bio')}</textarea>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="onBoard" checked={addValues.onBoard === 'on'} />
+          <span class="switch-text"><strong>Show on the editorial board</strong></span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" name="canEdit" checked={addValues.canEdit === 'on'} />
+          <span class="switch-text">
+            <strong>Can sign in to the admin</strong>
+            <span>Adds them to the “Who’s editing?” list.</span>
+          </span>
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+        <button type="submit" class="btn btn-sunrise"><PlusIcon /> Add person</button>
+      </div>
+    </form>
+  </dialog>
 </Admin>
 
+<script>
+  import '../../../scripts/admin-staff';
+</script>
+
 <style>
+  .year .field {
+    max-width: 240px;
+  }
+  .staff tbody tr.on > * {
+    background: var(--grey-100);
+  }
+  .staff tbody tr.on > :first-child {
+    box-shadow: inset 3px 0 0 var(--ink);
+  }
   .photo-cell {
     width: 64px;
+    padding-left: 12px;
   }
-  .thumb {
-    display: block;
+  .face {
+    display: grid;
+    place-items: center;
     width: 40px;
     height: 40px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--grey-600);
+    object-fit: cover;
+  }
+  .staff th[scope='row'] {
+    font-weight: 400;
+  }
+  .who {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .name {
+    font-weight: 600;
+  }
+  .actions {
+    text-align: right;
+  }
+  .photo-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .portrait {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 96px;
+    height: 116px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .small-portrait {
+    width: 88px;
+    height: 104px;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--grey-600);
+  }
+  .file {
+    cursor: pointer;
+  }
+  .file:focus-within,
+  .drop:focus-within {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .wide {
+    width: 100%;
+    justify-content: center;
+  }
+  .remove {
+    margin-top: 8px;
+  }
+  .drop-row {
+    display: flex;
+    gap: 16px;
+  }
+  .drop {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 16px;
+    border: 1px dashed var(--grey-600);
+    background: var(--grey-50);
+    text-align: center;
+    cursor: pointer;
   }
 </style>

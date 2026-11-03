@@ -64,6 +64,26 @@ export const personForm = z.object({
   bio: optionalText(600),
 });
 
+/** Adding someone to a school year's staff from the Staff page. */
+export const staffAddForm = z.object({
+  name: text(80, 'Add their name.'),
+  position: text(80, 'Add their role, like Sports writer.'),
+  bio: optionalText(600),
+  onBoard: checkbox,
+  canEdit: checkbox,
+});
+
+/** Editing someone on the Staff page: who they are and their role that year. */
+export const staffEditForm = z.object({
+  termId: id,
+  name: text(80, 'Add their name.'),
+  position: text(80, 'Add their role, like Sports writer.'),
+  bio: optionalText(600),
+  onBoard: checkbox,
+  hasProfile: checkbox,
+  canEdit: checkbox,
+});
+
 export const staffTermForm = z.object({
   personId: id,
   schoolYear,

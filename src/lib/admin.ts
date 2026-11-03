@@ -59,6 +59,7 @@ export const DONE = {
   unpublished: 'Moved back to drafts.',
   scheduled: 'Scheduled.',
   deleted: 'Deleted.',
+  removed: 'Removed.',
   uploaded: 'Uploaded.',
   pinned: 'Pinned to the top of the homepage.',
   unpinned: 'Unpinned. The homepage leads with the newest story.',
