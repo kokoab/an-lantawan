@@ -1,126 +1,114 @@
 ---
-import Field from '../../../components/admin/Field.astro';
+import PinIcon from '../../../assets/icons/admin/pin.svg';
+import PlusIcon from '../../../assets/icons/admin/plus.svg';
 import { parsePage } from '../../../core/paging';
+import { formatWhen } from '../../../core/when';
 import { db } from '../../../db/client';
-import { listAllSections } from '../../../db/queries/admin/sections';
-import {
-  listAdminStories,
-  type StoryKind,
-  type StoryStatus,
-} from '../../../db/queries/admin/stories';
-import { STORY_KINDS, STORY_STATUSES } from '../../../db/schema';
+import { listAdminStories, type StoryStatus } from '../../../db/queries/admin/stories';
+import { getSettings } from '../../../db/queries/settings';
 import Admin from '../../../layouts/Admin.astro';
-import { formatStamp } from '../../../lib/format';
 import { mediaUrl } from '../../../lib/urls';
 
 const params = Astro.url.searchParams;
-const status = (STORY_STATUSES as readonly string[]).includes(params.get('status') ?? '')
-  ? (params.get('status') as StoryStatus)
-  : null;
-const kind = (STORY_KINDS as readonly string[]).includes(params.get('kind') ?? '')
-  ? (params.get('kind') as StoryKind)
-  : null;
-const sectionId = Number(params.get('section')) || null;
+const FILTERS: Array<{ value: StoryStatus | null; label: string }> = [
+  { value: null, label: 'All' },
+  { value: 'draft', label: 'Drafts' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'published', label: 'Published' },
+];
+const asked = params.get('status');
+const status =
+  asked === 'archived' ? 'archived' : (FILTERS.find((f) => f.value === asked)?.value ?? null);
 const q = (params.get('q') ?? '').trim().slice(0, 100);
 const page = parsePage(params.get('page')) ?? 1;
+const now = new Date();
 
-const [sections, list] = await Promise.all([
-  listAllSections(db),
-  listAdminStories(db, { status, sectionId, kind, q, page, perPage: 30 }),
+const [list, pin] = await Promise.all([
+  listAdminStories(db, { status, sectionId: null, kind: null, q, page, perPage: 20 }),
+  getSettings(db, { 'home.pinned_story_id': null as number | null }),
 ]);
+const pinnedId = pin['home.pinned_story_id'];
 const STATUS = {
-  draft: 'Draft',
-  scheduled: 'Scheduled',
-  published: 'Published',
-  archived: 'Archived',
-};
-const KIND: Record<string, string> = {
-  article: 'Story',
-  opinion: 'Opinion',
-  editorial: 'Editorial',
-  cartoon: 'Cartoon',
-  explainer: 'Explainer',
-  photo: 'Photos',
-  video: 'Video',
-  letter: 'Letter',
-};
-const href = (p: number) => {
-  const u = new URLSearchParams(params);
-  if (p > 1) u.set('page', String(p));
-  else u.delete('page');
+  draft: { label: 'Draft', tone: '' },
+  scheduled: { label: 'Scheduled', tone: 'grey' },
+  published: { label: 'Published', tone: 'ink' },
+  archived: { label: 'Archived', tone: 'grey' },
+} as const;
+const href = (change: { status?: string | null; page?: number }) => {
+  const u = new URLSearchParams();
+  const s = 'status' in change ? change.status : status;
+  if (s) u.set('status', s);
+  if (q) u.set('q', q);
+  if (change.page && change.page > 1) u.set('page', String(change.page));
   return `/admin/stories${u.size ? `?${u}` : ''}`;
 };
-const filtered = Boolean(status || kind || sectionId || q);
 ---
 
-<Admin title="Stories" section="stories">
-  <a slot="actions" class="btn btn-primary" href="/admin/stories/new">Write a story</a>
+<Admin title="Stories" section="stories" subtitle={`${list.total} ${list.total === 1 ? 'story' : 'stories'}`}>
+  <a slot="actions" class="btn btn-sunrise" href="/admin/stories/new"><PlusIcon /> New story</a>
 
-  <form class="toolbar" method="get" role="search">
-    <Field name="q" label="Headline" type="search" value={q} placeholder="Words in the headline" />
-    <div class="field narrow">
-      <label for="f-status">Status</label>
-      <select id="f-status" name="status" data-autosubmit>
-        <option value="">Any</option>
-        {STORY_STATUSES.map((s) => <option value={s} selected={s === status}>{STATUS[s]}</option>)}
-      </select>
-    </div>
-    <div class="field narrow">
-      <label for="f-section">Section</label>
-      <select id="f-section" name="section" data-autosubmit>
-        <option value="">Any</option>
-        {sections.map((s) => <option value={s.id} selected={s.id === sectionId}>{s.name}</option>)}
-      </select>
-    </div>
-    <div class="field narrow">
-      <label for="f-kind">Kind</label>
-      <select id="f-kind" name="kind" data-autosubmit>
-        <option value="">Any</option>
-        {STORY_KINDS.map((k) => <option value={k} selected={k === kind}>{KIND[k]}</option>)}
-      </select>
-    </div>
-    <button class="btn btn-secondary" type="submit">Find</button>
-  </form>
-
-  <p class="muted small count">
-    <span>{list.total} {list.total === 1 ? 'story' : 'stories'}</span>
-    {filtered && <a href="/admin/stories">Clear filters</a>}
-  </p>
+  <div class="bar">
+    <nav class="segments" aria-label="Show">
+      {FILTERS.map((f) => (
+        <a class:list={['btn', f.value === status ? 'btn-primary' : 'btn-secondary']} href={href({ status: f.value })} aria-current={f.value === status ? 'page' : undefined}>
+          {f.label}
+        </a>
+      ))}
+    </nav>
+    <form method="get" role="search" class="search">
+      {status && <input type="hidden" name="status" value={status} />}
+      <label class="visually-hidden" for="story-search">Search stories</label>
+      <input id="story-search" type="search" name="q" value={q} placeholder="Search stories" />
+    </form>
+  </div>
 
   {
     list.rows.length === 0 ? (
       <div class="empty-state">
-        <h2>{filtered ? 'No stories match' : 'No stories yet'}</h2>
-        <p>{filtered ? 'Try other words or filters.' : 'Write the first one.'}</p>
-        <a class="btn btn-primary" href={filtered ? '/admin/stories' : '/admin/stories/new'}>
-          {filtered ? 'Show all stories' : 'Write a story'}
-        </a>
+        <h2>{q ? `No stories match “${q}”` : status ? `No ${FILTERS.find((f) => f.value === status)?.label.toLowerCase() ?? 'stories'}` : 'No stories yet'}</h2>
+        <p>{q || status ? 'Try other words, or show all stories.' : 'Write the first one.'}</p>
+        <a class="btn btn-secondary" href={q || status ? '/admin/stories' : '/admin/stories/new'}>{q || status ? 'Show all stories' : 'New story'}</a>
       </div>
     ) : (
       <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
-              <th scope="col"><span class="visually-hidden">Cover</span></th>
-              <th scope="col">Headline</th>
-              <th scope="col" class="hide-sm">Section</th>
+              <th scope="col">Story</th>
               <th scope="col">Status</th>
-              <th scope="col" class="hide-sm">Last edited</th>
+              <th scope="col" class="hide-sm">Author</th>
+              <th scope="col" class="hide-sm">Updated</th>
+              <th scope="col"><span class="visually-hidden">Edit</span></th>
             </tr>
           </thead>
           <tbody>
             {list.rows.map((s) => (
               <tr>
-                <td>{s.coverKey ? <img class="thumb" src={mediaUrl(s.coverKey)} alt="" loading="lazy" /> : <span class="thumb" />}</td>
-                <th scope="row">
-                  <a href={`/admin/stories/${s.id}`}>{s.title}</a>
-                  {s.kind !== 'article' && <span class="muted small"> {KIND[s.kind]}</span>}
-                </th>
-                <td class="muted hide-sm">{s.section}</td>
                 <td>
-                  <span class:list={['badge', { ink: s.status === 'published', sun: s.status === 'scheduled' }]}>{STATUS[s.status]}</span>
+                  <span class="story-cell">
+                    {s.coverKey ? <img class="thumb" src={mediaUrl(s.coverKey)} alt="" loading="lazy" /> : <span class="thumb" />}
+                    <span class="text">
+                      <strong>
+                        {s.id === pinnedId && (
+                          <span class="pin" title="Pinned as the top story">
+                            <PinIcon />
+                            <span class="visually-hidden">Pinned: </span>
+                          </span>
+                        )}
+                        {s.title || 'Untitled draft'}
+                      </strong>
+                      <span>{s.section}</span>
+                    </span>
+                  </span>
                 </td>
-                <td class="muted small hide-sm">{formatStamp(s.updatedAt)}</td>
+                <td>
+                  <span class:list={['tag', STATUS[s.status].tone]}>{STATUS[s.status].label}</span>
+                </td>
+                <td class="hide-sm">{s.author ?? ''}</td>
+                <td class="hide-sm nowrap">{formatWhen(s.status === 'scheduled' ? s.publishedAt : s.updatedAt, now, { olderAsDate: true })}</td>
+                <td class="actions">
+                  <a href={`/admin/stories/${s.id}`}>Edit<span class="visually-hidden"> {s.title}</span></a>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -128,26 +116,42 @@ const filtered = Boolean(status || kind || sectionId || q);
       </div>
     )
   }
+
   {
     list.pages > 1 && (
       <nav class="pager" aria-label="Pages">
-        {page > 1 ? <a class="btn btn-secondary" href={href(page - 1)}>Previous</a> : <span />}
-        <span class="muted small">Page {page} of {list.pages}</span>
-        {page < list.pages ? <a class="btn btn-secondary" href={href(page + 1)}>Next</a> : <span />}
+        <a class="btn btn-secondary" href={page > 1 ? href({ page: page - 1 }) : undefined} aria-disabled={page <= 1 ? 'true' : undefined}>Previous</a>
+        <span>Page {page} of {list.pages}</span>
+        <a class="btn btn-secondary" href={page < list.pages ? href({ page: page + 1 }) : undefined} aria-disabled={page >= list.pages ? 'true' : undefined}>Next</a>
       </nav>
     )
   }
 </Admin>
 
 <style>
-  .thumb {
-    display: block;
-  }
-  .count {
+  .bar {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
     gap: 12px;
   }
-  .muted a {
-    text-decoration: underline;
+  .search {
+    flex: 1 1 240px;
+    max-width: 320px;
+  }
+  .pin {
+    display: inline-block;
+    margin-right: 4px;
+    vertical-align: -2px;
+  }
+  .pin :global(svg) {
+    width: 14px;
+    height: 14px;
+  }
+  .nowrap {
+    white-space: nowrap;
+  }
+  .story-cell strong {
+    font-size: 15px;
   }
 </style>

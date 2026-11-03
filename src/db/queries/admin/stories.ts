@@ -55,6 +55,12 @@ export async function listAdminStories(
         updatedAt: stories.updatedAt,
         section: sections.name,
         coverKey: media.key,
+        author: sql<string | null>`(
+          select ${people.name} from ${storyAuthors}
+          join ${people} on ${people.id} = ${storyAuthors.personId}
+          where ${storyAuthors.storyId} = ${stories.id}
+          order by ${storyAuthors.sort} limit 1
+        )`,
       })
       .from(stories)
       .innerJoin(sections, eq(sections.id, stories.sectionId))
