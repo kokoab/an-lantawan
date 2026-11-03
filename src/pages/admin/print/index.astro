@@ -1,58 +1,386 @@
 ---
+import CheckIcon from '../../../assets/icons/admin/check.svg';
+import CloseIcon from '../../../assets/icons/admin/close.svg';
+import PlusIcon from '../../../assets/icons/admin/plus.svg';
+import TrashIcon from '../../../assets/icons/admin/trash.svg';
+import UploadIcon from '../../../assets/icons/admin/upload.svg';
+import MonthSelect from '../../../components/admin/MonthSelect.astro';
+import PdfUpload from '../../../components/admin/PdfUpload.astro';
 import { db } from '../../../db/client';
-import { listAllIssues } from '../../../db/queries/admin/issues';
+import { getIssueById, listAllIssues, setIssueArchived } from '../../../db/queries/admin/issues';
+import { getMedia } from '../../../db/queries/admin/media';
 import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readFormWithFiles, record } from '../../../lib/admin';
 import { formatMonth } from '../../../lib/format';
+import { removeIssue, saveIssue } from '../../../lib/issue-save';
 import { mediaUrl } from '../../../lib/urls';
 
-const rows = await listAllIssues(db);
+const editor = editorOf(Astro);
 const KIND = { newsletter: 'Newsletter', special: 'Special publication' };
+const thisMonth = new Date().toISOString().slice(0, 7);
+
+let addValues: Record<string, unknown> = { kind: 'newsletter', month: thisMonth };
+let addErrors: Record<string, string> = {};
+let editValues: Record<string, unknown> | null = null;
+let editErrors: Record<string, string> = {};
+let addOpen = Astro.url.searchParams.has('add');
+
+if (Astro.request.method === 'POST') {
+  const form = await readFormWithFiles(Astro.request);
+  const intent = one(form.values, 'intent');
+  const issueId = Number(one(form.values, 'issueId'));
+  const issue = Number.isInteger(issueId) && issueId > 0 ? await getIssueById(db, issueId) : null;
+
+  if (intent === 'add') {
+    const saved = await saveIssue(db, form, editor, null);
+    if (saved.ok) return doneRedirect(Astro, `/admin/print?edit=${saved.id}`, 'created');
+    addValues = form.values;
+    addErrors = saved.errors;
+    addOpen = true;
+  } else if (intent === 'save' && issue) {
+    const saved = await saveIssue(db, form, editor, issue);
+    if (saved.ok) return doneRedirect(Astro, `/admin/print?edit=${issue.id}`, 'saved');
+    editValues = { ...form.values, issueId: issue.id };
+    editErrors = saved.errors;
+  } else if (intent === 'delete' && issue) {
+    await removeIssue(db, issue, editor);
+    return doneRedirect(Astro, '/admin/print', 'deleted');
+  } else if (intent === 'show' && issue) {
+    await setIssueArchived(db, issue.id, false);
+    await record(editor, {
+      action: 'restore',
+      entityType: 'issue',
+      entityId: issue.id,
+      summary: `Showed the print issue ${issue.title} again`,
+    });
+    return doneRedirect(Astro, `/admin/print?edit=${issue.id}`, 'restored');
+  } else return Astro.redirect('/admin/print', 303);
+  Astro.response.status = 422;
+}
+
+const rows = await listAllIssues(db);
+const editId = Number(editValues?.issueId ?? Astro.url.searchParams.get('edit'));
+const editingRow = rows.find((r) => r.id === editId) ?? rows[0] ?? null;
+const editing = editingRow ? await getIssueById(db, editingRow.id) : null;
+const [pdf, cover] = editing
+  ? await Promise.all([
+      getMedia(db, editing.pdfId),
+      editing.coverId ? getMedia(db, editing.coverId) : null,
+    ])
+  : [null, null];
+const ev = (k: string) => {
+  if (editValues) return (editValues[k] ?? '') as string;
+  if (!editing) return '';
+  if (k === 'month') return editing.publishedOn.slice(0, 7);
+  return String((editing as Record<string, unknown>)[k] ?? '');
+};
+const av = (k: string) => (addValues[k] ?? '') as string;
+// A PDF uploaded before the form came back with something to fix stays chosen.
+const pendingPdf = async (values: Record<string, unknown> | null) => {
+  const pdfId = Number(values?.pdfId);
+  const file = Number.isInteger(pdfId) && pdfId > 0 ? await getMedia(db, pdfId) : null;
+  return file?.kind === 'pdf' ? { id: file.id, key: file.key, bytes: file.bytes } : null;
+};
+const [editUploaded, addUploaded] = await Promise.all([
+  pendingPdf(editValues),
+  pendingPdf(addOpen ? addValues : null),
+]);
 ---
 
-<Admin title="Print issues" section="print">
-  <a slot="actions" class="btn btn-primary" href="/admin/print/new">Add an issue</a>
+<Admin title="Print issues" section="print" subtitle={`${rows.length} ${rows.length === 1 ? 'issue' : 'issues'}`}>
+  <button slot="actions" class="btn btn-primary" type="button" data-open-dialog="add-issue"><PlusIcon /> Add issue</button>
+
   {
     rows.length === 0 ? (
       <div class="empty-state">
         <h2>No print issues yet</h2>
-        <p>Upload a newsletter or special publication as a PDF. It shows up on /print.</p>
-        <a class="btn btn-primary" href="/admin/print/new">Add an issue</a>
+        <p>Upload a newsletter or special publication as a PDF. It shows up on the Print page.</p>
+        <button class="btn btn-primary" type="button" data-open-dialog="add-issue"><PlusIcon /> Add issue</button>
       </div>
     ) : (
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th scope="col"><span class="visually-hidden">Cover</span></th>
-              <th scope="col">Title</th>
-              <th scope="col" class="hide-sm">Kind</th>
-              <th scope="col">Released</th>
-              <th scope="col"><span class="visually-hidden">Status</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
+      <div class="columns main-side">
+        <div class="table-wrap">
+          <table class="table issues">
+            <thead>
               <tr>
-                <td>{r.coverKey ? <img class="thumb" src={mediaUrl(r.coverKey)} alt="" loading="lazy" /> : <span class="thumb" />}</td>
-                <th scope="row">
-                  <a href={`/admin/print/${r.id}`}>{r.title}</a>
-                </th>
-                <td class="muted hide-sm">{KIND[r.kind]}</td>
-                <td class="muted">{formatMonth(r.publishedOn)}</td>
-                <td>{r.archivedAt && <span class="badge">Archived</span>}</td>
+                <th scope="col">Cover</th>
+                <th scope="col">Issue</th>
+                <th scope="col" class="hide-sm">Released</th>
+                <th scope="col"><span class="visually-hidden">Edit</span></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr class:list={{ on: r.id === editing?.id }}>
+                  <td class="cover-cell">
+                    {r.coverKey ? <img class="mini" src={mediaUrl(r.coverKey)} alt="" loading="lazy" /> : <span class="mini" />}
+                  </td>
+                  <th scope="row">
+                    <span class="what">
+                      <span class="name">{r.title}</span>
+                      <span class="muted small">
+                        {KIND[r.kind]}
+                        {r.archivedAt && ', hidden from the site'}
+                      </span>
+                    </span>
+                  </th>
+                  <td class="hide-sm">{formatMonth(r.publishedOn)}</td>
+                  <td class="actions">
+                    <a class="link-button" href={`/admin/print?edit=${r.id}#edit`} aria-label={`Edit ${r.title}`}>Edit</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {editing && (
+          <section class="panel" id="edit" aria-labelledby="edit-title">
+            <h2 id="edit-title">Edit issue</h2>
+            <form class="form" method="post" enctype="multipart/form-data">
+              <input type="hidden" name="intent" value="save" />
+              <input type="hidden" name="issueId" value={editing.id} />
+              <div class="field">
+                <label for="e-title">Title</label>
+                <input id="e-title" name="title" type="text" maxlength="160" value={ev('title')} aria-invalid={editErrors.title ? 'true' : undefined} />
+                {editErrors.title && <p class="field-error">{editErrors.title}</p>}
+              </div>
+              <div class="field">
+                <label for="e-kind">Type</label>
+                <select id="e-kind" name="kind">
+                  {Object.entries(KIND).map(([value, label]) => <option value={value} selected={ev('kind') === value}>{label}</option>)}
+                </select>
+              </div>
+              <div class="row two">
+                <div class="field">
+                  <label for="e-month">Released</label>
+                  <MonthSelect id="e-month" name="month" value={ev('month')} />
+                </div>
+                <div class="field">
+                  <label for="e-pages">Pages</label>
+                  <input id="e-pages" name="pages" type="text" inputmode="numeric" placeholder="Filled in from the PDF" value={ev('pages')} aria-invalid={editErrors.pages ? 'true' : undefined} />
+                  {editErrors.pages && <p class="field-error">{editErrors.pages}</p>}
+                </div>
+              </div>
+              <div class="field">
+                <label for="e-description">Description (optional)</label>
+                <textarea id="e-description" name="description" rows="2" maxlength="600" placeholder="A line about what’s inside, shown on the Print page.">{ev('description')}</textarea>
+              </div>
+              <div class="field">
+                <span class="label">PDF</span>
+                <PdfUpload id="e-pdf" current={pdf ? { key: pdf.key, bytes: pdf.bytes } : null} uploaded={editUploaded} error={editErrors.pdf} />
+              </div>
+              <div class="field">
+                <span class="label">Cover</span>
+                <div class="cover-row">
+                  {cover ? <img class="cover" src={mediaUrl(cover.key)} alt="" /> : <span class="cover" />}
+                  <label class="btn btn-secondary file">
+                    <UploadIcon /> <span data-file-label>{cover ? 'Replace cover' : 'Upload cover'}</span>
+                    <input type="file" name="cover" accept="image/jpeg,image/png,image/webp,image/gif" class="visually-hidden" data-file />
+                  </label>
+                </div>
+                <p class="hint">Optional. Without one, the site shows a designed cover with the title.</p>
+                {editErrors.cover && <p class="field-error">{editErrors.cover}</p>}
+              </div>
+              <p class="muted small" hidden data-pdf-waiting>Waiting for the upload to finish.</p>
+              <button class="btn btn-sunrise wide" type="submit"><CheckIcon /> Save issue</button>
+            </form>
+            {editing.archivedAt && (
+              <form method="post">
+                <input type="hidden" name="intent" value="show" />
+                <input type="hidden" name="issueId" value={editing.id} />
+                <p class="muted small">This issue is hidden from the site.</p>
+                <button class="link-button" type="submit">Show it on the site again</button>
+              </form>
+            )}
+            <button class="link-button danger delete" type="button" data-open-dialog="delete-issue"><TrashIcon /> Delete this issue</button>
+          </section>
+        )}
       </div>
+    )
+  }
+
+  <dialog class="dialog" id="add-issue" aria-labelledby="add-title" slot="dialogs" data-open={addOpen ? '' : undefined}>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="intent" value="add" />
+      <div class="dialog-head">
+        <h2 id="add-title">Add an issue</h2>
+        <button type="button" class="dialog-close" aria-label="Close" data-close-dialog><CloseIcon /></button>
+      </div>
+      <div class="form">
+        <div class="row two">
+          <div class="field">
+            <label for="a-title">Title <span class="required">Required</span></label>
+            <input id="a-title" name="title" type="text" maxlength="160" placeholder="Second semester 2025–2026" value={av('title')} aria-invalid={addErrors.title ? 'true' : undefined} />
+            {addErrors.title && <p class="field-error">{addErrors.title}</p>}
+          </div>
+          <div class="field">
+            <label for="a-kind">Type</label>
+            <select id="a-kind" name="kind">
+              {Object.entries(KIND).map(([value, label]) => <option value={value} selected={av('kind') === value}>{label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <span class="label">PDF</span>
+          <PdfUpload id="a-pdf" current={null} uploaded={addUploaded} error={addErrors.pdf} />
+        </div>
+        <div class="row two">
+          <div class="field">
+            <span class="label">Cover</span>
+            <label class="drop-cover">
+              <UploadIcon />
+              <strong data-file-label>Upload a cover</strong>
+              <span class="muted small">Optional. Without one, the site designs a cover.</span>
+              <input type="file" name="cover" accept="image/jpeg,image/png,image/webp,image/gif" class="visually-hidden" data-file />
+            </label>
+            {addErrors.cover && <p class="field-error">{addErrors.cover}</p>}
+          </div>
+          <div class="stack">
+            <div class="field">
+              <label for="a-month">Released</label>
+              <MonthSelect id="a-month" name="month" value={av('month')} />
+            </div>
+            <div class="field">
+              <label for="a-pages">Pages</label>
+              <input id="a-pages" name="pages" type="text" inputmode="numeric" placeholder="Filled in from the PDF" value={av('pages')} aria-invalid={addErrors.pages ? 'true' : undefined} />
+              {addErrors.pages && <p class="field-error">{addErrors.pages}</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <span class="muted small" hidden data-pdf-waiting>Waiting for the upload to finish.</span>
+        <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+        <button type="submit" class="btn btn-sunrise"><PlusIcon /> Add issue</button>
+      </div>
+    </form>
+  </dialog>
+
+  {
+    editing && (
+      <dialog class="dialog" id="delete-issue" aria-labelledby="delete-title" slot="dialogs">
+        <form method="post">
+          <input type="hidden" name="intent" value="delete" />
+          <input type="hidden" name="issueId" value={editing.id} />
+          <h2 id="delete-title">Delete “{editing.title}”?</h2>
+          <p>The PDF and the cover are removed from the site, and links to this issue stop working. This can’t be undone.</p>
+          <div class="dialog-actions">
+            <button type="button" class="btn btn-secondary" data-close-dialog>Keep the issue</button>
+            <button type="submit" class="btn btn-danger-solid"><TrashIcon /> Delete issue</button>
+          </div>
+        </form>
+      </dialog>
     )
   }
 </Admin>
 
+<script>
+  import '../../../scripts/admin-print';
+</script>
+
 <style>
-  .thumb {
+  .issues tbody tr.on > * {
+    background: var(--grey-100);
+  }
+  .issues tbody tr.on > :first-child {
+    box-shadow: inset 3px 0 0 var(--ink);
+  }
+  .cover-cell {
+    width: 64px;
+    padding-left: 12px;
+  }
+  .mini {
     display: block;
-    width: 36px;
-    height: 48px;
+    width: 40px;
+    height: 54px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .issues th[scope='row'] {
+    font-weight: 400;
+  }
+  .what {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .name {
+    font-weight: 600;
+  }
+  .actions {
+    text-align: right;
+  }
+  .label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .cover-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+  }
+  .cover {
+    display: block;
+    flex: none;
+    width: 96px;
+    height: 128px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .file {
+    cursor: pointer;
+  }
+  .file:focus-within,
+  .drop-cover:focus-within {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .wide {
+    width: 100%;
+    justify-content: center;
+  }
+  .delete {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .drop-cover {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 112px;
+    padding: 16px;
+    border: 1px dashed var(--grey-600);
+    background: var(--grey-50);
+    text-align: center;
+    cursor: pointer;
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .dialog-actions .muted {
+    margin-right: auto;
+  }
+  #delete-issue {
+    width: min(500px, calc(100vw - 32px));
+  }
+  #delete-issue h2 {
+    margin: 0 0 12px;
+    font-size: 26px;
+    line-height: 30px;
+    letter-spacing: -0.03em;
+  }
+  #delete-issue p {
+    margin: 0;
+    color: var(--grey-600);
+    line-height: 24px;
   }
 </style>
