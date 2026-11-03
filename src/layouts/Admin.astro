@@ -26,9 +26,11 @@ interface Props {
   subtitle?: string | null;
   /** A link back up, shown above the title. */
   back?: { label: string; href: string };
+  /** The page draws its own header, as the story editor does. */
+  bare?: boolean;
 }
 
-const { title, section, subtitle, back } = Astro.props;
+const { title, section, subtitle, back, bare = false } = Astro.props;
 const editor = editorOf(Astro);
 const notice = doneMessage(Astro.url);
 const [[{ unread }], [{ ongoing }]] = await Promise.all([
@@ -111,14 +113,14 @@ const switchHref = `/admin/who?next=${encodeURIComponent(Astro.url.pathname + As
       </aside>
 
       <main class="admin-main" id="main">
-        <header class="admin-head">
+        {!bare && (<header class="admin-head">
           <div class="admin-title">
             {back && <a class="admin-back" href={back.href}>{back.label}</a>}
             <h1>{title}</h1>
             {subtitle && <p>{subtitle}</p>}
           </div>
           {Astro.slots.has('actions') && <div class="admin-actions"><slot name="actions" /></div>}
-        </header>
+        </header>)}
         {
           notice && (
             <p class="admin-notice" role="status">
