@@ -21,7 +21,7 @@ if (Astro.request.method === 'POST') {
   const form = await readForm(Astro.request);
   const row = await getActivity(db, Number(one(form, 'activityId')));
   const tooOld = row && now.getTime() - row.at.getTime() > UNDO_DAYS * 86_400_000;
-  if (!row || !row.undo) problem = 'That change can’t be undone, or was undone already.';
+  if (!row?.undo) problem = 'That change can’t be undone, or was undone already.';
   else if (tooOld) problem = `Changes can only be undone for ${UNDO_DAYS} days.`;
   else {
     try {
