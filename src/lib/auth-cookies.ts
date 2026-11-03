@@ -8,8 +8,14 @@ export const OAUTH_NEXT_COOKIE = '__Host-al_oauth_next';
 
 const base: AstroCookieSetOptions = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' };
 
-export function setSessionCookie(cookies: AstroCookies, token: string, expiresAt: Date) {
-  cookies.set(SESSION_COOKIE, token, { ...base, expires: expiresAt });
+/** Without “Remember me”, the cookie lasts until the browser closes. */
+export function setSessionCookie(
+  cookies: AstroCookies,
+  token: string,
+  expiresAt: Date,
+  remember = true,
+) {
+  cookies.set(SESSION_COOKIE, token, remember ? { ...base, expires: expiresAt } : base);
 }
 
 export function clearSessionCookie(cookies: AstroCookies) {

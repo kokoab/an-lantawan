@@ -66,5 +66,6 @@ export const GET: APIRoute = async ({ request, url, cookies, redirect }) => {
     entityId: editor.id,
     summary: `${editor.name} signed in as ${editor.email}`,
   });
-  return redirect(next, 303);
+  // Next, the person picks who they are; then they land where they were going.
+  return redirect(`/admin/who?next=${encodeURIComponent(next)}`, 303);
 };

@@ -79,3 +79,13 @@ describe('sessions', () => {
     expect(sessionState(now, now)).toBe('expired');
   });
 });
+
+describe('short sessions without “Remember me”', () => {
+  const now = new Date('2026-03-12T00:00:00Z');
+  it('last 12 hours and slide forward once half is used', () => {
+    expect(newExpiry(now, false).toISOString()).toBe('2026-03-12T12:00:00.000Z');
+    expect(sessionState(new Date('2026-03-12T11:00:00Z'), now, false)).toBe('valid');
+    expect(sessionState(new Date('2026-03-12T05:00:00Z'), now, false)).toBe('refresh');
+    expect(sessionState(new Date('2026-03-11T23:59:00Z'), now, false)).toBe('expired');
+  });
+});

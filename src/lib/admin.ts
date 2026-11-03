@@ -79,9 +79,9 @@ export const doneRedirect = (astro: Pick<AstroGlobal, 'redirect'>, path: string,
   astro.redirect(`${path}${path.includes('?') ? '&' : '?'}done=${code}`, 303);
 
 /** Records who changed what. Failing to log never blocks the change itself. */
-export async function record(editor: SignedInEditor, a: Omit<Activity, 'editorId'>) {
+export async function record(editor: SignedInEditor, a: Omit<Activity, 'editorId' | 'personId'>) {
   try {
-    await logActivity(db, { ...a, editorId: editor.id });
+    await logActivity(db, { ...a, editorId: editor.id, personId: editor.person?.id ?? null });
   } catch (e) {
     console.error('activity log failed', e);
   }

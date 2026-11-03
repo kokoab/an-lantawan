@@ -6,6 +6,8 @@ import { FALLBACK_CSP, SECURITY_HEADERS } from './lib/security-headers';
 
 /** Admin pages anyone may open: the sign-in screen and the "not on the list" screen. */
 const PUBLIC_ADMIN_PATHS = new Set(['/admin/signin', '/admin/denied']);
+/** Signed in, but nobody has said who is editing yet: only the picker opens. */
+const PICK_PERSON_PATH = '/admin/who';
 
 const isAdminPage = (path: string) => path === '/admin' || path.startsWith('/admin/');
 const isAdminApi = (path: string) => path.startsWith('/api/admin/');
@@ -20,7 +22,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const session = await validateSession(db, token);
     if (session) {
       locals.editor = session.editor;
-      if (session.extended) setSessionCookie(cookies, token, session.expiresAt);
+      if (session.extended) setSessionCookie(cookies, token, session.expiresAt, session.remember);
     } else {
       clearSessionCookie(cookies);
     }
@@ -34,6 +36,22 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isAdminPage(path) && !PUBLIC_ADMIN_PATHS.has(path)) {
       const nextPath = encodeURIComponent(`${url.pathname}${url.search}`);
       return context.redirect(`/admin/signin?next=${nextPath}`, 303);
+    }
+  }
+
+  // Signed in with the shared account, but nobody picked a name: everything waits on the picker.
+  if (
+    locals.editor &&
+    !locals.editor.person &&
+    path !== PICK_PERSON_PATH &&
+    !PUBLIC_ADMIN_PATHS.has(path)
+  ) {
+    if (isAdminApi(path)) {
+      return Response.json({ ok: false, error: 'pick_person' }, { status: 401 });
+    }
+    if (isAdminPage(path)) {
+      const nextPath = encodeURIComponent(`${url.pathname}${url.search}`);
+      return context.redirect(`${PICK_PERSON_PATH}?next=${nextPath}`, 303);
     }
   }
 

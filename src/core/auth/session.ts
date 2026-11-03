@@ -22,11 +22,23 @@ export async function hashToken(token: string): Promise<string> {
   return toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)));
 }
 
-export const newExpiry = (now: Date) => new Date(now.getTime() + SESSION_DAYS * DAY_MS);
+/** Without “Remember me”, a session ends 12 hours after it was last used. */
+export const SHORT_SESSION_HOURS = 12;
+const HOUR_MS = 60 * 60 * 1000;
 
-export function sessionState(expiresAt: Date, now: Date): 'expired' | 'refresh' | 'valid' {
+export const newExpiry = (now: Date, remember = true) =>
+  new Date(now.getTime() + (remember ? SESSION_DAYS * DAY_MS : SHORT_SESSION_HOURS * HOUR_MS));
+
+export function sessionState(
+  expiresAt: Date,
+  now: Date,
+  remember = true,
+): 'expired' | 'refresh' | 'valid' {
   const left = expiresAt.getTime() - now.getTime();
   if (left <= 0) return 'expired';
-  if (left < REFRESH_WHEN_DAYS_LEFT * DAY_MS) return 'refresh';
+  const threshold = remember
+    ? REFRESH_WHEN_DAYS_LEFT * DAY_MS
+    : (SHORT_SESSION_HOURS / 2) * HOUR_MS;
+  if (left < threshold) return 'refresh';
   return 'valid';
 }
