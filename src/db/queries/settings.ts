@@ -15,16 +15,20 @@ export async function getSettings<T extends Record<string, unknown>>(
   return { ...defaults, ...found } as T;
 }
 
-/** Saves settings, recording who changed them. */
+/**
+ * Saves settings, recording who changed them. A null is stored as JSON null (the column
+ * can't hold SQL NULL), so it reads back as null rather than the default.
+ */
 export async function saveSettings(db: Db, values: Record<string, unknown>, editorId: number) {
-  const [first, ...rest] = Object.entries(values).map(([key, value]) =>
-    db
+  const [first, ...rest] = Object.entries(values).map(([key, raw]) => {
+    const value = raw === null || raw === undefined ? sql`'null'` : raw;
+    return db
       .insert(settings)
       .values({ key, value, updatedBy: editorId })
       .onConflictDoUpdate({
         target: settings.key,
         set: { value, updatedBy: editorId, updatedAt: sql`(unixepoch())` },
-      }),
-  );
+      });
+  });
   if (first) await db.batch([first, ...rest]);
 }
