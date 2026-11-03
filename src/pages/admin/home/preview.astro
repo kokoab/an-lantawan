@@ -1,0 +1,30 @@
+---
+/** The homepage as it would look with the choices on the Homepage form, before saving. */
+import HomePage from '../../../components/home/HomePage.astro';
+import { parseForm } from '../../../core/forms';
+import Site from '../../../layouts/Site.astro';
+import { readForm } from '../../../lib/admin';
+import { homeForm } from '../../../lib/admin-schemas';
+
+if (Astro.request.method !== 'POST') return Astro.redirect('/admin/home', 303);
+const parsed = parseForm(homeForm, await readForm(Astro.request));
+if (!parsed.ok) return Astro.redirect('/admin/home', 303);
+const { pin, prompt, sumatBand, banner } = parsed.data;
+---
+
+<Site title="Homepage preview">
+  <p class="preview-note" role="status">Preview. Nothing here is saved until you save the homepage.</p>
+  <HomePage preview={{ pinnedId: pin, prompt: prompt ?? '', sumatBand, sportsfestBanner: banner }} />
+</Site>
+
+<style>
+  .preview-note {
+    margin: 0;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ink);
+    background: var(--sunrise);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+  }
+</style>
