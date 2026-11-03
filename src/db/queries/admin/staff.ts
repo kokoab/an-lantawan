@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, isNotNull, isNull, like, sql } from 'drizzle-orm';
+import { slugify } from '../../../core/slug';
 import type { Db } from '../../client';
 import { media, people, staffTerms, storyAuthors } from '../../schema';
 
@@ -93,4 +94,40 @@ export async function listSchoolYears(db: Db) {
     .from(staffTerms)
     .orderBy(desc(staffTerms.schoolYear));
   return rows.map((r) => r.year);
+}
+
+/**
+ * People by the names typed in a credit field. Names already on file are matched without
+ * minding case; new names become new people, so “Photo desk” can be credited too.
+ */
+export async function findOrCreatePeople(db: Db, names: string[]) {
+  const wanted = [
+    ...new Map(names.map((n) => [n.trim().toLowerCase(), n.trim().replace(/\s+/g, ' ')])).values(),
+  ].filter(Boolean);
+  if (!wanted.length) return new Map<string, number>();
+  const rows = await db
+    .select({ id: people.id, name: people.name, slug: people.slug })
+    .from(people);
+  const byName = new Map(rows.map((r) => [r.name.toLowerCase(), r.id]));
+  const slugs = new Set(rows.map((r) => r.slug));
+  for (const name of wanted) {
+    if (byName.has(name.toLowerCase())) continue;
+    const base = slugify(name) || 'person';
+    let slug = base;
+    for (let n = 2; slugs.has(slug); n++) slug = `${base}-${n}`;
+    slugs.add(slug);
+    const [created] = await db.insert(people).values({ name, slug }).returning({ id: people.id });
+    byName.set(name.toLowerCase(), created.id);
+  }
+  return byName;
+}
+
+/** Someone already on file with exactly this name, ignoring case. */
+export async function findPersonByName(db: Db, name: string) {
+  const [row] = await db
+    .select({ id: people.id })
+    .from(people)
+    .where(sql`lower(${people.name}) = ${name.trim().toLowerCase()}`)
+    .limit(1);
+  return row?.id ?? null;
 }

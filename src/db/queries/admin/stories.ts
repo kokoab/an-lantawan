@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, inArray, like, sql } from 'drizzle-orm';
+import { describeChange } from '../../../core/content/diff';
 import type { Doc } from '../../../core/content/doc';
 import { slugify } from '../../../core/slug';
 import { type Query, runBatch } from '../../batch';
@@ -14,6 +15,7 @@ import {
   storyAuthors,
   storyEvents,
   storyMedia,
+  storyPresence,
   storyTags,
   storyVersions,
   tags,
@@ -150,7 +152,14 @@ export interface StoryInput {
   tags: string[];
   eventIds: number[];
   mediaIds: number[];
+  shareTitle: string | null;
+  shareSummary: string | null;
+  /** The staff member saving. */
+  personId: number | null;
 }
+
+/** Saves by the same person within this many minutes add to one version instead of many. */
+const VERSION_MINUTES = 10;
 
 const tagSlug = (name: string) => slugify(name).slice(0, 60);
 
@@ -203,6 +212,9 @@ export async function saveStory(
     writerPhoto: input.writerPhoto,
     videoUrl: input.videoUrl,
     publishedAt: input.publishedAt,
+    shareTitle: input.shareTitle,
+    shareSummary: input.shareSummary,
+    updatedByPersonId: input.personId,
     updatedAt: sql`(unixepoch())`,
   };
   let id: number;
@@ -230,14 +242,46 @@ export async function saveStory(
     ...tagIds.map((tagId) => db.insert(storyTags).values({ storyId: id, tagId })),
     ...files.map((mediaId) => db.insert(storyMedia).values({ storyId: id, mediaId })),
     ...input.eventIds.map((eventId) => db.insert(storyEvents).values({ storyId: id, eventId })),
-    db.insert(storyVersions).values({
-      storyId: id,
-      title: input.title,
-      dek: input.dek,
-      body: input.body,
-      savedBy: editorId,
-    }),
   );
+
+  // Autosave runs often, so one person's saves within a few minutes share a version.
+  const recent = await db
+    .select()
+    .from(storyVersions)
+    .where(eq(storyVersions.storyId, id))
+    .orderBy(desc(storyVersions.savedAt), desc(storyVersions.id))
+    .limit(2);
+  const [latest, before] = recent;
+  const now = Date.now();
+  const sameSession =
+    latest &&
+    latest.personId === input.personId &&
+    now - latest.savedAt.getTime() < VERSION_MINUTES * 60_000;
+  const snapshot = { title: input.title, dek: input.dek, body: input.body };
+  const asVersion = (v: typeof latest | undefined) =>
+    v ? { title: v.title, dek: v.dek, body: v.body as Doc } : null;
+  if (sameSession) {
+    queries.push(
+      db
+        .update(storyVersions)
+        .set({
+          ...snapshot,
+          note: describeChange(asVersion(before), snapshot),
+          savedAt: sql`(unixepoch())`,
+        })
+        .where(eq(storyVersions.id, latest.id)),
+    );
+  } else {
+    queries.push(
+      db.insert(storyVersions).values({
+        storyId: id,
+        ...snapshot,
+        note: describeChange(asVersion(latest), snapshot),
+        savedBy: editorId,
+        personId: input.personId,
+      }),
+    );
+  }
 
   const oldPath = existing ? `/${existing.sectionSlug}/${existing.slug}` : null;
   const newPath = `/${newSectionSlug}/${input.slug}`;
@@ -267,16 +311,18 @@ export async function setStoryState(
     .where(eq(stories.id, id));
 }
 
-/** The last saves of a story, newest first. */
-export async function listVersions(db: Db, storyId: number, limit = 15) {
+/** The saves of a story, newest first, with who saved each and what changed. */
+export async function listVersions(db: Db, storyId: number, limit = 30) {
   return db
     .select({
       id: storyVersions.id,
       title: storyVersions.title,
       savedAt: storyVersions.savedAt,
-      savedBy: storyVersions.savedBy,
+      note: storyVersions.note,
+      person: people.name,
     })
     .from(storyVersions)
+    .leftJoin(people, eq(people.id, storyVersions.personId))
     .where(eq(storyVersions.storyId, storyId))
     .orderBy(desc(storyVersions.savedAt), desc(storyVersions.id))
     .limit(limit);
@@ -297,6 +343,8 @@ export async function restoreVersion(
   storyId: number,
   version: typeof storyVersions.$inferSelect,
   editorId: number,
+  personId: number | null = null,
+  note = 'Restored an earlier version',
 ) {
   await runBatch(db, [
     db
@@ -306,6 +354,7 @@ export async function restoreVersion(
         dek: version.dek,
         body: version.body,
         updatedAt: sql`(unixepoch())`,
+        updatedByPersonId: personId,
       })
       .where(eq(stories.id, storyId)),
     db.insert(storyVersions).values({
@@ -314,6 +363,36 @@ export async function restoreVersion(
       dek: version.dek,
       body: version.body,
       savedBy: editorId,
+      personId,
+      note,
     }),
   ]);
+}
+
+/** Marks someone as having this story open, and says who else has it open right now. */
+export async function touchPresence(db: Db, storyId: number, personId: number) {
+  await db
+    .insert(storyPresence)
+    .values({ storyId, personId })
+    .onConflictDoUpdate({
+      target: [storyPresence.storyId, storyPresence.personId],
+      set: { seenAt: sql`(unixepoch())` },
+    });
+  return db
+    .select({ id: people.id, name: people.name })
+    .from(storyPresence)
+    .innerJoin(people, eq(people.id, storyPresence.personId))
+    .where(
+      and(
+        eq(storyPresence.storyId, storyId),
+        sql`${storyPresence.personId} <> ${personId}`,
+        sql`${storyPresence.seenAt} > unixepoch() - 90`,
+      ),
+    );
+}
+
+export async function leavePresence(db: Db, storyId: number, personId: number) {
+  await db
+    .delete(storyPresence)
+    .where(and(eq(storyPresence.storyId, storyId), eq(storyPresence.personId, personId)));
 }
