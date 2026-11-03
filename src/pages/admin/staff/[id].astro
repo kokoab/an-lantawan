@@ -93,7 +93,7 @@ const currentYear =
   new Date().getMonth() >= 7 ? `${thisYear}–${thisYear + 1}` : `${thisYear - 1}–${thisYear}`;
 ---
 
-<Admin title={person.name} section="staff" back={{ label: 'People', href: '/admin/staff' }}>
+<Admin title={person.name} section="staff" back={{ label: 'Staff', href: '/admin/staff' }}>
   <a slot="actions" class="btn btn-secondary" href={`/people/${person.slug}`} target="_blank" rel="noopener">
     View their page
   </a>
