@@ -1,6 +1,6 @@
 import { type AnySQLiteColumn, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { archivedAt, createdAt, id, oneOf, timestamp } from './columns';
-import { sections } from './publishing';
+import { people, sections } from './publishing';
 
 /**
  * People allowed into the admin, by Google account email (stored lowercase).
@@ -24,6 +24,12 @@ export const sessions = sqliteTable(
       .notNull()
       .references(() => editors.id, { onDelete: 'cascade' }),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    /** The staff member picked on “Who’s editing?”; null until someone picks. */
+    personId: integer('person_id').references((): AnySQLiteColumn => people.id, {
+      onDelete: 'set null',
+    }),
+    /** Unticking “Remember me” keeps the session to this browser visit. */
+    remember: integer('remember', { mode: 'boolean' }).notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [index('sessions_editor').on(t.editorId)],
@@ -78,10 +84,17 @@ export const activityLog = sqliteTable(
   {
     id: id(),
     editorId: integer('editor_id').references(() => editors.id, { onDelete: 'set null' }),
+    personId: integer('person_id').references((): AnySQLiteColumn => people.id, {
+      onDelete: 'set null',
+    }),
+    /** Stories, Home, Sumat, Sportsfest, Print issues, Staff or Site settings. */
+    area: text('area'),
     action: text('action').notNull(),
     entityType: text('entity_type').notNull(),
     entityId: integer('entity_id'),
     summary: text('summary').notNull(),
+    /** How to undo the change, when it can be undone. See src/lib/undo.ts. */
+    undo: text('undo', { mode: 'json' }),
     at: timestamp('at'),
   },
   (t) => [

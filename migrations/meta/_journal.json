@@ -71,6 +71,20 @@
       "when": 1793659676187,
       "tag": "0009_mapulon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793680483444,
+      "tag": "0010_editing_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793680491094,
+      "tag": "0011_first_editor",
+      "breakpoints": true
     }
   ]
 }

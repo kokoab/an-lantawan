@@ -21,6 +21,8 @@ export const people = sqliteTable('people', {
   photoId: integer('photo_id').references((): AnySQLiteColumn => media.id, {
     onDelete: 'set null',
   }),
+  /** Shown on “Who’s editing?” after signing in with the publication account. */
+  canEdit: integer('can_edit', { mode: 'boolean' }).notNull().default(false),
   createdAt: createdAt(),
   archivedAt: archivedAt(),
 });
@@ -112,6 +114,16 @@ export const stories = sqliteTable(
     cartoonOnTop: integer('cartoon_on_top', { mode: 'boolean' }).notNull().default(false),
     writerPhoto: integer('writer_photo', { mode: 'boolean' }).notNull().default(false),
     videoUrl: text('video_url'),
+    /** What Facebook and Messenger show when the story is shared; the headline and summary if empty. */
+    shareTitle: text('share_title'),
+    shareSummary: text('share_summary'),
+    /** The staff member who saved it last. */
+    updatedByPersonId: integer('updated_by_person_id').references(
+      (): AnySQLiteColumn => people.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
     publishedAt: integer('published_at', { mode: 'timestamp' }),
     scheduledFor: integer('scheduled_for', { mode: 'timestamp' }),
     updatedAt: timestamp('updated_at'),
@@ -201,6 +213,9 @@ export const storyVersions = sqliteTable(
     dek: text('dek'),
     body: text('body', { mode: 'json' }).notNull(),
     savedBy: integer('saved_by').references(() => editors.id, { onDelete: 'set null' }),
+    personId: integer('person_id').references(() => people.id, { onDelete: 'set null' }),
+    /** What changed, in a few words: “Changed the headline and first paragraph”. */
+    note: text('note'),
     savedAt: timestamp('saved_at'),
   },
   (t) => [index('story_versions_story').on(t.storyId, t.savedAt)],
@@ -225,4 +240,19 @@ export const issues = sqliteTable(
     archivedAt: archivedAt(),
   },
   (t) => [oneOf('issues_kind', t.kind, ISSUE_KINDS)],
+);
+
+/** Who has a story open right now, so others see “Ana Reyes is also editing”. */
+export const storyPresence = sqliteTable(
+  'story_presence',
+  {
+    storyId: integer('story_id')
+      .notNull()
+      .references(() => stories.id, { onDelete: 'cascade' }),
+    personId: integer('person_id')
+      .notNull()
+      .references(() => people.id, { onDelete: 'cascade' }),
+    seenAt: timestamp('seen_at'),
+  },
+  (t) => [primaryKey({ columns: [t.storyId, t.personId] })],
 );
