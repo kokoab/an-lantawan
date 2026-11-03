@@ -1,0 +1,122 @@
+---
+/** The live medal tally across the top of the homepage while a Sportsfest is on. */
+import type { Tally } from '../../db/queries/sportsfest';
+import { tribuUrl } from '../../lib/urls';
+import MedalCount from '../sportsfest/MedalCount.astro';
+import TribuMark from '../sportsfest/TribuMark.astro';
+
+interface Props {
+  name: string;
+  year: number;
+  day: { day: number; of: number } | null;
+  tally: Tally;
+}
+const { name, year, day, tally } = Astro.props;
+---
+
+<section class="band home-tally" aria-labelledby="home-tally-title">
+  <div class="head">
+    <h2 id="home-tally-title">{name}</h2>
+    {day && <p>Day {day.day} of {day.of}</p>}
+  </div>
+  <ol class="rows">
+    {
+      tally.map((r) => (
+        <li>
+          <span class="rank">{r.rank}</span>
+          <a class="tribu" href={tribuUrl(year, r.tribu.slug)}>
+            <TribuMark tribu={r.tribu} size="sm" />
+            <span>{r.tribu.name}</span>
+          </a>
+          <span class="medals">
+            <MedalCount medal={1} count={r.gold} size="xs" />
+            <MedalCount medal={2} count={r.silver} size="xs" />
+            <MedalCount medal={3} count={r.bronze} size="xs" />
+          </span>
+        </li>
+      ))
+    }
+  </ol>
+  <a class="btn btn-primary" href="/sportsfest#tally">Full medal tally</a>
+</section>
+
+<style>
+  .home-tally {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-block: 20px;
+    border-bottom: 1px solid var(--ink);
+    background: var(--sunrise);
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 26px;
+    letter-spacing: -0.03em;
+  }
+  .head p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .rows {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    align-items: center;
+    gap: 10px;
+  }
+  .rank {
+    font-weight: 700;
+  }
+  .tribu {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+  .medals {
+    display: flex;
+    gap: 4px;
+  }
+  .btn {
+    align-self: flex-start;
+  }
+  @media (min-width: 1024px) {
+    .home-tally {
+      flex-direction: row;
+      align-items: center;
+      gap: 32px;
+    }
+    .head {
+      flex-direction: column;
+      gap: 2px;
+      flex: none;
+    }
+    .rows {
+      display: flex;
+      flex: 1;
+      flex-wrap: wrap;
+      gap: 12px 32px;
+    }
+    li {
+      display: flex;
+    }
+    .btn {
+      align-self: center;
+    }
+  }
+</style>

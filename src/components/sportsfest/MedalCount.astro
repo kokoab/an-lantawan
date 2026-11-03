@@ -3,7 +3,7 @@
 interface Props {
   medal: 1 | 2 | 3;
   count: number;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
 }
 
 const { medal, count, size = 'lg' } = Astro.props;
@@ -43,6 +43,11 @@ const NAMES = { 1: 'gold', 2: 'silver', 3: 'bronze' } as const;
     width: 44px;
     height: 36px;
     font-size: 18px;
+  }
+  .xs {
+    width: 30px;
+    height: 24px;
+    font-size: 14px;
   }
   .sm {
     width: 40px;
