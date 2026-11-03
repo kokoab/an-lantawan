@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkUpload, pdfPageCount, sniff, uploadKey } from './media';
+import { checkUpload, pdfPageCount, sniff, uploadKey, uploadName } from './media';
 
 const bytes = (...b: number[]) => new Uint8Array([...b, ...new Array(16).fill(0)]);
 const JPG = bytes(0xff, 0xd8, 0xff, 0xe0);
@@ -103,5 +103,27 @@ describe('pdfPageCount', () => {
     const before = ' '.repeat(1024 * 1024 - head.length - 5);
     const bytes = new TextEncoder().encode(`${head}${before}/Type /Page /Parent 2 0 R`);
     expect(pdfPageCount(bytes)).toBe(1);
+  });
+});
+
+describe('uploadName', () => {
+  it('drops the folders and the random part', () => {
+    expect(uploadName('uploads/2026/11/3y0y5w116p-newsletter-2026.pdf')).toBe(
+      'newsletter-2026.pdf',
+    );
+  });
+
+  it('round-trips with uploadKey', () => {
+    const key = uploadKey(
+      'First Semester.PDF',
+      { kind: 'pdf', mime: 'application/pdf', ext: 'pdf' },
+      new Date(),
+      'abcdefghij',
+    );
+    expect(uploadName(key)).toBe('first-semester.pdf');
+  });
+
+  it('leaves names without a random part alone', () => {
+    expect(uploadName('cover.jpg')).toBe('cover.jpg');
   });
 });

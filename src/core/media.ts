@@ -68,6 +68,10 @@ export function uploadKey(fileName: string, type: FileType, now: Date, random: s
   return `uploads/${month}/${random}-${base}.${type.ext}`;
 }
 
+/** The file name an editor recognises, from a stored key: no folders, no random prefix. */
+export const uploadName = (key: string) =>
+  (key.split('/').pop() ?? key).replace(/^[a-z0-9]{10}-/, '');
+
 const CHUNK = 1 << 20;
 const OVERLAP = 512;
 const text = (b: Uint8Array) => {
