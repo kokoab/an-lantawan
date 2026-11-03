@@ -1,0 +1,213 @@
+---
+import EditIcon from '../../../../assets/icons/admin/edit.svg';
+import RefreshIcon from '../../../../assets/icons/admin/refresh.svg';
+import { blockTexts, type DiffPart, wordDiff } from '../../../../core/content/diff';
+import type { Doc } from '../../../../core/content/doc';
+import { initials } from '../../../../core/people';
+import { formatClock, formatWhen } from '../../../../core/when';
+import { db } from '../../../../db/client';
+import {
+  getStoryForEdit,
+  getVersion,
+  listVersions,
+  restoreVersion,
+} from '../../../../db/queries/admin/stories';
+import Admin from '../../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, idParam, one, readForm, record } from '../../../../lib/admin';
+
+const editor = editorOf(Astro);
+const id = idParam(Astro.params.id);
+const story = id ? await getStoryForEdit(db, id) : null;
+if (!story) return Astro.rewrite('/404');
+const here = `/admin/stories/${story.id}`;
+const now = new Date();
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const version = await getVersion(db, story.id, Number(one(form, 'versionId')));
+  if (version) {
+    const when = formatWhen(version.savedAt, now);
+    await restoreVersion(
+      db,
+      story.id,
+      version,
+      editor.id,
+      editor.person?.id ?? null,
+      `Restored the ${when} version`,
+    );
+    await record(editor, {
+      action: 'update',
+      entityType: 'story',
+      entityId: story.id,
+      summary: `Restored the ${when} version of “${version.title}”`,
+    });
+    return doneRedirect(Astro, here, 'restored');
+  }
+}
+
+const versions = await listVersions(db, story.id);
+const askedId = Number(Astro.url.searchParams.get('compare'));
+const compareId = versions.find((v) => v.id === askedId)?.id ?? versions[1]?.id ?? null;
+const compare = compareId ? await getVersion(db, story.id, compareId) : null;
+
+type Row = { label: string; parts: DiffPart[] };
+const rows: Row[] = [];
+if (compare) {
+  const diffRow = (label: string, before: string, after: string) => {
+    if (before !== after) rows.push({ label, parts: wordDiff(before, after) });
+  };
+  diffRow('Headline', compare.title, story.title);
+  diffRow('Summary', compare.dek ?? '', story.dek ?? '');
+  const a = blockTexts(compare.body as Doc);
+  const b = blockTexts(story.body);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diffRow(b[i]?.label ?? a[i]?.label ?? 'Block', a[i]?.text ?? '', b[i]?.text ?? '');
+  }
+}
+const label = compare
+  ? formatWhen(compare.savedAt, now).startsWith('Today')
+    ? formatClock(compare.savedAt)
+    : formatWhen(compare.savedAt, now)
+  : '';
+const STATUS = {
+  draft: 'Draft',
+  scheduled: 'Scheduled',
+  published: 'Published',
+  archived: 'Archived',
+};
+---
+
+<Admin
+  title="Edit story"
+  section="stories"
+  back={{ label: 'All stories', href: '/admin/stories' }}
+  subtitle={`${STATUS[story.status]}, saved ${formatWhen(story.updatedAt, now)}`}
+>
+  <a slot="actions" class="btn btn-secondary" href={here}><EditIcon /> Back to editing</a>
+  <div class="columns main-side">
+    <section class="panel">
+      {
+        compare ? (
+          <>
+            <div class="panel-head">
+              <h2>Comparing with {label}</h2>
+              <span class="small">Removed text is struck out. Added text is highlighted.</span>
+            </div>
+            {rows.length === 0 ? (
+              <p class="panel-note">This version is the same as the current one.</p>
+            ) : (
+              <div class="diffs">
+                {rows.map((r) => (
+                  <div class="diff">
+                    <span class="muted small">{r.label}</span>
+                    <p>
+                      {r.parts.map((p) => (p.op === 'same' ? p.text : p.op === 'added' ? <ins>{p.text}</ins> : <del>{p.text}</del>))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div class="form-actions">
+              <form method="post">
+                <input type="hidden" name="versionId" value={compare.id} />
+                <button class="btn btn-secondary" type="submit" data-confirm="Put this version’s headline, summary and text back? The current text is kept as a version too.">
+                  <RefreshIcon /> Restore the {label} version
+                </button>
+              </form>
+              <a class="btn btn-secondary" href={here}><EditIcon /> Back to editing</a>
+            </div>
+          </>
+        ) : (
+          <p class="panel-note">There is only one version so far. Earlier versions appear here as the story is edited.</p>
+        )
+      }
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Versions</h2>
+        <span>Kept while the story exists</span>
+      </div>
+      <ol class="versions">
+        {versions.map((v, i) => (
+          <li class:list={{ on: v.id === compareId }}>
+            <a href={i === 0 ? here : `?compare=${v.id}`}>
+              <span class="initials" aria-hidden="true">{initials(v.person ?? 'Editor')}</span>
+              <span class="text">
+                <span class="when">
+                  {i === 0 ? 'Now' : formatWhen(v.savedAt, now).replace(/^Today, /, '')}
+                  {i === 0 && <span class="tag ink">Current</span>}
+                </span>
+                <strong>{v.person ?? 'An editor'}</strong>
+                {v.note && <span class="muted small">{v.note}</span>}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+  </div>
+</Admin>
+
+<style>
+  .diffs {
+    display: flex;
+    flex-direction: column;
+  }
+  .diff {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-block: 14px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .diff p {
+    margin: 0;
+    font-size: 16px;
+    line-height: 26px;
+  }
+  ins {
+    background: #fff099;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  del {
+    color: var(--red);
+  }
+  .versions {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .versions a {
+    display: flex;
+    gap: 12px;
+    padding: 12px 10px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .versions .on a {
+    border-left: 3px solid var(--ink);
+    background: var(--grey-100);
+  }
+  .versions .text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .when {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+  .versions .tag {
+    padding: 0 6px;
+    font-size: 11px;
+  }
+  .versions strong {
+    font-size: 14px;
+    font-weight: 500;
+  }
+</style>

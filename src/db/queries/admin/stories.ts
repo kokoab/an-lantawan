@@ -251,6 +251,32 @@ export async function saveStory(
     .where(eq(storyVersions.storyId, id))
     .orderBy(desc(storyVersions.savedAt), desc(storyVersions.id))
     .limit(2);
+  // A story imported or made before version history keeps its old self as the first version.
+  if (recent.length === 0 && existing) {
+    const [was] = await db
+      .select({
+        title: stories.title,
+        dek: stories.dek,
+        body: stories.body,
+        savedAt: stories.updatedAt,
+      })
+      .from(stories)
+      .where(eq(stories.id, id));
+    if (was) {
+      const [first] = await db
+        .insert(storyVersions)
+        .values({
+          storyId: id,
+          title: was.title,
+          dek: was.dek,
+          body: was.body,
+          note: 'As it was before editing here',
+          savedAt: was.savedAt,
+        })
+        .returning();
+      recent.push(first);
+    }
+  }
   const [latest, before] = recent;
   const now = Date.now();
   const sameSession =
