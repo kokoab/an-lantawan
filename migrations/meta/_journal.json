@@ -85,6 +85,13 @@
       "when": 1793680491094,
       "tag": "0011_first_editor",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793683372310,
+      "tag": "0012_board_and_profiles",
+      "breakpoints": true
     }
   ]
 }

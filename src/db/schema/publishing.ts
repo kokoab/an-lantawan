@@ -23,6 +23,8 @@ export const people = sqliteTable('people', {
   }),
   /** Shown on “Who’s editing?” after signing in with the publication account. */
   canEdit: integer('can_edit', { mode: 'boolean' }).notNull().default(false),
+  /** Bylines link to /people/<slug>. Off for people without stories, like advisers. */
+  hasProfile: integer('has_profile', { mode: 'boolean' }).notNull().default(true),
   createdAt: createdAt(),
   archivedAt: archivedAt(),
 });
@@ -38,6 +40,8 @@ export const staffTerms = sqliteTable(
     schoolYear: text('school_year').notNull(),
     position: text('position').notNull(),
     sort: integer('sort').notNull().default(0),
+    /** Listed on the editorial board. Off for staff such as writers and columnists. */
+    onBoard: integer('on_board', { mode: 'boolean' }).notNull().default(true),
   },
   (t) => [uniqueIndex('staff_terms_unique').on(t.personId, t.schoolYear, t.position)],
 );
