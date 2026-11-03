@@ -1,0 +1,414 @@
+---
+import CheckIcon from '../../../assets/icons/admin/check.svg';
+import CloseIcon from '../../../assets/icons/admin/close.svg';
+import EditIcon from '../../../assets/icons/admin/edit.svg';
+import EyeIcon from '../../../assets/icons/admin/eye.svg';
+import PinIcon from '../../../assets/icons/admin/pin.svg';
+import SearchIcon from '../../../assets/icons/search.svg';
+import { parseForm } from '../../../core/forms';
+import { db } from '../../../db/client';
+import { updatePrompt } from '../../../db/queries/admin/sumat';
+import { getHomepage } from '../../../db/queries/home';
+import { getSettings, saveSettings } from '../../../db/queries/settings';
+import { getSummary, listNewest } from '../../../db/queries/stories';
+import { currentPrompt } from '../../../db/queries/sumat';
+import Admin from '../../../layouts/Admin.astro';
+import { doneRedirect, editorOf, one, readForm, record } from '../../../lib/admin';
+import { homeForm } from '../../../lib/admin-schemas';
+import { formatDate } from '../../../lib/format';
+import { mediaUrl, storyLabel } from '../../../lib/urls';
+
+const editor = editorOf(Astro);
+const [stored, prompt] = await Promise.all([
+  getSettings(db, {
+    'home.pinned_story_id': null as number | null,
+    'home.sumat_band': true,
+    'home.sportsfest_banner': true,
+  }),
+  currentPrompt(db),
+]);
+const saved = {
+  pin: stored['home.pinned_story_id'],
+  prompt: prompt?.text ?? '',
+  sumatBand: stored['home.sumat_band'],
+  banner: stored['home.sportsfest_banner'],
+};
+// What the form shows: the saved homepage, or the choices posted back while picking a story.
+let state = saved;
+let problem: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  const parsed = parseForm(homeForm, form);
+  if (!parsed.ok) problem = Object.values(parsed.errors)[0];
+  else {
+    const d = parsed.data;
+    const intent = one(form, 'intent');
+    state = {
+      pin: intent === 'stage' ? d.pick : d.pin,
+      prompt: d.prompt ?? '',
+      sumatBand: d.sumatBand,
+      banner: d.banner,
+    };
+    if (state.pin && !(await getSummary(db, state.pin))) {
+      problem = 'That story isn’t published, so it can’t be the top story.';
+      state = { ...state, pin: saved.pin };
+    } else if (intent === 'save') {
+      if (prompt && !state.prompt) problem = 'Write the prompt shown on the homepage.';
+      else {
+        const changes: Record<string, unknown> = {};
+        const before: Record<string, unknown> = {};
+        const said: string[] = [];
+        const change = (key: string, now: unknown, was: unknown, text: string) => {
+          if (now === was) return;
+          changes[key] = now;
+          before[key] = was;
+          said.push(text);
+        };
+        const pinned = state.pin ? await getSummary(db, state.pin) : null;
+        change(
+          'home.pinned_story_id',
+          state.pin,
+          saved.pin,
+          pinned ? `pinned “${pinned.title}”` : 'unpinned the top story',
+        );
+        change(
+          'home.sumat_band',
+          state.sumatBand,
+          saved.sumatBand,
+          `${state.sumatBand ? 'showed' : 'hid'} the Sumat band`,
+        );
+        change(
+          'home.sportsfest_banner',
+          state.banner,
+          saved.banner,
+          `${state.banner ? 'showed' : 'hid'} the Sportsfest banner`,
+        );
+        if (Object.keys(changes).length) await saveSettings(db, changes, editor.id);
+        if (prompt && state.prompt !== saved.prompt) {
+          await updatePrompt(db, prompt.id, {
+            text: state.prompt,
+            opensAt: prompt.opensAt,
+            closesAt: prompt.closesAt,
+          });
+          said.push(`changed the Sumat prompt to “${state.prompt}”`);
+        }
+        if (said.length) {
+          const summary = said.join(', ');
+          await record(editor, {
+            action: 'update',
+            entityType: 'home',
+            summary: `Homepage: ${summary.charAt(0).toUpperCase()}${summary.slice(1)}`,
+            undo: Object.keys(before).length ? { kind: 'settings', before } : undefined,
+          });
+        }
+        return doneRedirect(Astro, '/admin/home', 'saved');
+      }
+    }
+  }
+  if (problem) Astro.response.status = 422;
+}
+
+const [home, choices] = await Promise.all([
+  getHomepage(db, { pinnedId: state.pin }),
+  listNewest(db, { limit: 50 }),
+]);
+const pinned = state.pin ? home.lead : null;
+const staged = state.pin !== saved.pin;
+const label = (s: { kind: string; section: { name: string }; publishedAt: Date | null }) =>
+  [storyLabel(s), formatDate(s.publishedAt)].filter(Boolean).join(', ');
+---
+
+<Admin title="Homepage" section="home" subtitle="Changes go live when you save">
+  <Fragment slot="actions">
+    <button class="btn btn-sunrise save" type="submit" form="home-form" name="intent" value="save"><CheckIcon /> Save homepage</button>
+    <button class="btn btn-secondary preview" type="submit" form="home-form" formaction="/admin/home/preview" formtarget="_blank"><EyeIcon /> Preview</button>
+  </Fragment>
+
+  {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
+
+  <form method="post" id="home-form" class="columns main-side">
+    <input type="hidden" name="pin" value={state.pin ?? ''} />
+    <div class="stack">
+      <section class="panel" aria-labelledby="pinned-title">
+        <div class="panel-head">
+          <h2 id="pinned-title">Pinned top story</h2>
+          {pinned && <span class="pinned"><PinIcon /> {staged ? 'Pinned when you save' : 'Pinned'}</span>}
+        </div>
+        {
+          pinned ? (
+            <div class="top">
+              {pinned.cover ? <img class="top-photo" src={mediaUrl(pinned.cover.key)} alt="" /> : <span class="top-photo" />}
+              <div class="top-text">
+                <span class="muted small">{label(pinned)}</span>
+                <strong class="top-title">{pinned.title}</strong>
+                <span class="muted small">Unpin to let the newest story lead instead.</span>
+              </div>
+              <button class="btn btn-secondary" type="button" data-open-dialog="pick-story"><EditIcon /> Change</button>
+            </div>
+          ) : (
+            <div class="top none">
+              <p class="muted">{staged ? 'Unpinned when you save.' : 'Nothing is pinned.'} The newest story leads the homepage.</p>
+              <button class="btn btn-secondary" type="button" data-open-dialog="pick-story"><EditIcon /> Pin a story</button>
+            </div>
+          )
+        }
+      </section>
+
+      <section class="panel" aria-labelledby="latest-title">
+        <div class="panel-head">
+          <h2 id="latest-title">Latest</h2>
+          <span>Fills itself</span>
+        </div>
+        {
+          home.latest.length === 0 ? (
+            <p class="panel-note">Latest shows the newest stories once more than one is published.</p>
+          ) : (
+            <ul class="latest">
+              {home.latest.map((s) => (
+                <li>
+                  {s.cover ? <img class="thumb" src={mediaUrl(s.cover.key)} alt="" loading="lazy" /> : <span class="thumb" />}
+                  <span>
+                    <strong>{s.title}</strong>
+                    <span class="muted small">{label(s)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+        <p class="muted small">The five newest published stories after the top story show here automatically. To feature one, pin it as the top story.</p>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="sumat-title">
+        <h2 id="sumat-title">Sumat band</h2>
+        <div class="field">
+          <label for="prompt">Prompt shown on the homepage</label>
+          <input id="prompt" name="prompt" type="text" maxlength="300" value={state.prompt} disabled={!prompt} />
+          <p class="hint">
+            {prompt ? 'Same prompt as the Sumat page. Changing it here changes both.' : 'Sumat is closed, so the band is hidden. Open it from the Sumat page.'}
+          </p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="sumatBand" checked={state.sumatBand} />
+          <span class="switch-text"><strong>Show the Sumat band</strong></span>
+        </label>
+      </section>
+
+      <section class="panel" aria-labelledby="sf-title">
+        <h2 id="sf-title">Sportsfest</h2>
+        <label class="switch">
+          <input type="checkbox" name="banner" checked={state.banner} />
+          <span class="switch-text">
+            <strong>Show the Sportsfest banner</strong>
+            <span>Puts the medal tally at the top of the homepage while a Sportsfest is on. Turn it off when Sportsfest ends.</span>
+          </span>
+        </label>
+      </section>
+    </div>
+  </form>
+
+  <dialog class="dialog" id="pick-story" aria-labelledby="pick-title" slot="dialogs">
+    <div class="dialog-head">
+      <div>
+        <h2 id="pick-title">Pick the top story</h2>
+        <p>It stays at the top of the homepage until you unpin it or pin another.</p>
+      </div>
+      <button type="button" class="dialog-close" aria-label="Close" data-close-dialog><CloseIcon /></button>
+    </div>
+    <label class="search">
+      <SearchIcon />
+      <span class="visually-hidden">Search stories</span>
+      <input type="search" placeholder="Search published stories" data-story-search />
+    </label>
+    <ul class="picks" data-story-list>
+      <li>
+        <label class="pick">
+          <input type="radio" name="pick" value="" form="home-form" checked={!state.pin} />
+          <span class="pick-text">
+            <span class="muted small">No pinned story</span>
+            <strong>Let the newest story lead</strong>
+          </span>
+        </label>
+      </li>
+      {
+        choices.map((s) => (
+          <li data-title={s.title.toLowerCase()}>
+            <label class="pick">
+              <input type="radio" name="pick" value={s.id} form="home-form" checked={s.id === state.pin} />
+              {s.cover ? <img class="pick-photo" src={mediaUrl(s.cover.key)} alt="" loading="lazy" /> : <span class="pick-photo" />}
+              <span class="pick-text">
+                <span class="muted small">{label(s)}</span>
+                <strong>{s.title}</strong>
+              </span>
+            </label>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="muted small" hidden data-story-empty>No published story matches. Try another word from the headline.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="btn btn-sunrise" form="home-form" name="intent" value="stage">Pin this story</button>
+    </div>
+  </dialog>
+</Admin>
+
+<script>
+  import '../../../scripts/admin-home';
+</script>
+
+<style>
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .save {
+    order: 2;
+  }
+  .pinned {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .top {
+    display: grid;
+    gap: 16px;
+    align-items: center;
+  }
+  .top-photo {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .top-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .top-title {
+    font-size: 22px;
+    line-height: 28px;
+    letter-spacing: -0.02em;
+  }
+  .top .btn {
+    justify-self: start;
+  }
+  .top.none p {
+    margin: 0;
+  }
+  .latest {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .latest li {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-block: 12px;
+    border-top: 1px solid var(--grey-300);
+  }
+  .latest li > span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .latest strong {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 20px;
+  }
+  .latest .thumb {
+    flex: none;
+    width: 64px;
+    height: 40px;
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 0 14px;
+    border: 1px solid var(--ink);
+  }
+  .search input {
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    border: 0;
+    outline: 0;
+    background: none;
+    font: inherit;
+    font-size: 16px;
+  }
+  .search:focus-within {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .picks {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 50vh;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+  }
+  .pick {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--grey-300);
+    cursor: pointer;
+  }
+  .pick:has(input:checked) {
+    border: 2px solid var(--ink);
+    padding: 13px 15px;
+  }
+  .pick input {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--ink);
+  }
+  .pick-photo {
+    flex: none;
+    width: 80px;
+    height: 52px;
+    background: var(--grey-100);
+    object-fit: cover;
+  }
+  .pick-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pick-text strong {
+    font-size: 15px;
+    line-height: 20px;
+  }
+  [data-story-empty] {
+    margin: 12px 0 0;
+  }
+  @media (min-width: 768px) {
+    .top {
+      grid-template-columns: 240px minmax(0, 1fr) auto;
+    }
+    .top.none {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+</style>

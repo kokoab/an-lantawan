@@ -112,6 +112,15 @@ export const promptForm = z.object({
   closesAt: optionalDateTime,
 });
 
+/** The homepage form. `pick` is the story chosen in “Pick the top story”, not yet saved. */
+export const homeForm = z.object({
+  pin: optionalId,
+  pick: optionalId,
+  prompt: optionalText(300),
+  sumatBand: checkbox,
+  banner: checkbox,
+});
+
 export const letterForm = z.object({
   text: text(3000, 'The letter can’t be empty.'),
   signature: text(120, 'Add a signature, like Anonymous.'),
