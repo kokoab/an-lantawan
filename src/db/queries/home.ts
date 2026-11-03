@@ -14,12 +14,15 @@ async function sectionIds(db: Db, slug: string) {
 
 /**
  * Everything the homepage shows. The lead is the pinned story, or the newest one if
- * nothing is pinned; every later block skips stories already shown above it.
+ * nothing is pinned; every later block skips stories already shown above it. The admin
+ * preview passes the pin it hasn't saved yet.
  */
-export async function getHomepage(db: Db) {
-  const { 'home.pinned_story_id': pinnedId } = await getSettings(db, {
-    'home.pinned_story_id': null as number | null,
-  });
+export async function getHomepage(db: Db, override?: { pinnedId: number | null }) {
+  const pinnedId = override
+    ? override.pinnedId
+    : (await getSettings(db, { 'home.pinned_story_id': null as number | null }))[
+        'home.pinned_story_id'
+      ];
   const pinned = pinnedId ? await getSummary(db, pinnedId) : null;
   const newest = await listNewest(db, { limit: 6, exclude: pinned ? [pinned.id] : [] });
   const lead = pinned ?? newest[0] ?? null;

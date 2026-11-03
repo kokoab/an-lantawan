@@ -1,0 +1,84 @@
+---
+/**
+ * The homepage's blocks. The live homepage reads everything from the database; the admin
+ * preview passes the choices it hasn't saved yet.
+ */
+import { settingDefaults } from '../../core/settings';
+import { festivalDay, manilaDay } from '../../core/sportsfest/display';
+import { db } from '../../db/client';
+import { getHomepage } from '../../db/queries/home';
+import { getSettings } from '../../db/queries/settings';
+import { getSportsfest, getTally } from '../../db/queries/sportsfest';
+import { getSection } from '../../db/queries/stories';
+import { currentPrompt } from '../../db/queries/sumat';
+import HomeHero from './HomeHero.astro';
+import HomeMoreNews from './HomeMoreNews.astro';
+import HomeOpinion from './HomeOpinion.astro';
+import HomeSumat from './HomeSumat.astro';
+import HomeTally from './HomeTally.astro';
+
+interface Props {
+  preview?: {
+    pinnedId: number | null;
+    prompt: string;
+    sumatBand: boolean;
+    sportsfestBanner: boolean;
+  };
+}
+const { preview } = Astro.props;
+
+const [home, prompt, opinionSection, copy] = await Promise.all([
+  getHomepage(db, preview && { pinnedId: preview.pinnedId }),
+  currentPrompt(db),
+  getSection(db, 'opinion'),
+  getSettings(db, {
+    ...settingDefaults('sumat.home_tagline', 'sumat.home_note'),
+    'home.sportsfest_banner': true,
+    'home.sumat_band': true,
+  }),
+]);
+const banner = preview ? preview.sportsfestBanner : copy['home.sportsfest_banner'];
+const sumatBand = preview ? preview.sumatBand : copy['home.sumat_band'];
+const promptText = prompt ? preview?.prompt.trim() || prompt.text : null;
+// While a Sportsfest is on, its tally leads the homepage unless editors turned the banner off.
+const sf = banner ? await getSportsfest(db) : null;
+const live = sf?.status === 'ongoing' ? sf : null;
+const tally = live ? await getTally(db, live) : [];
+---
+
+{
+  live && tally.length > 0 && (
+    <HomeTally name={live.name} year={live.year} tally={tally} day={festivalDay(live.startsOn, live.endsOn, manilaDay(new Date()))} />
+  )
+}
+{home.lead && <HomeHero lead={home.lead} minutes={home.leadMinutes} excerpt={home.leadExcerpt} latest={home.latest} />}
+{
+  promptText && sumatBand && (
+    <HomeSumat prompt={promptText} letters={home.letters} tagline={copy['sumat.home_tagline']} note={copy['sumat.home_note']} />
+  )
+}
+{home.more.length > 0 && <HomeMoreNews stories={home.more} />}
+{home.opinion.length > 0 && <HomeOpinion intro={opinionSection?.description ?? null} pieces={home.opinion} />}
+{
+  !home.lead && (
+    <section class="band framed empty">
+      <h1>No stories yet</h1>
+      <p>Stories will show up here as soon as they're published.</p>
+    </section>
+  )
+}
+
+<style>
+  .empty {
+    padding-block: 96px;
+  }
+  .empty h1 {
+    margin: 0 0 12px;
+    font-size: 48px;
+    letter-spacing: -0.04em;
+  }
+  .empty p {
+    margin: 0;
+    color: var(--grey-600);
+  }
+</style>
