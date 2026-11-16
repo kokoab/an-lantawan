@@ -63,7 +63,9 @@ export const DONE = {
   uploaded: 'Uploaded.',
   pinned: 'Pinned to the top of the homepage.',
   unpinned: 'Unpinned. The homepage leads with the newest story.',
-  generated: 'Bracket created.',
+  generated: 'Matches set up.',
+  swapped: 'Draw changed.',
+  advanced: 'The top tribus are in the playoffs.',
   result: 'Result saved.',
   cleared: 'Result cleared.',
   moved: 'Order saved.',
@@ -75,9 +77,15 @@ export const doneMessage = (url: URL) => {
   return code && code in DONE ? DONE[code as DoneCode] : null;
 };
 
+/** Where to go after a change: the notice goes in the query, before any #anchor. */
+export function doneUrl(path: string, code: DoneCode) {
+  const [base, hash] = path.split('#', 2);
+  return `${base}${base.includes('?') ? '&' : '?'}done=${code}${hash ? `#${hash}` : ''}`;
+}
+
 /** Back to a page with a notice, after a change (post, redirect, get). */
 export const doneRedirect = (astro: Pick<AstroGlobal, 'redirect'>, path: string, code: DoneCode) =>
-  astro.redirect(`${path}${path.includes('?') ? '&' : '?'}done=${code}`, 303);
+  astro.redirect(doneUrl(path, code), 303);
 
 /** The Activity page's areas, one per menu entry. */
 export const AREAS = [
