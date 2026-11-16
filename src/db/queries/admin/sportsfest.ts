@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNull, like, sql } from 'drizzle-orm';
 import { slugify } from '../../../core/slug';
 import type { BracketMatch, BracketStage } from '../../../core/sportsfest/bracket';
+import { categoryLabel } from '../../../core/sportsfest/display';
 import type { Finish, MedalCount } from '../../../core/sportsfest/medals';
 import { type Query, runBatch } from '../../batch';
 import type { Db } from '../../client';
@@ -158,7 +159,12 @@ export async function listEventsAdmin(db: Db, sportsfestId: number) {
   const [rows, cats] = await Promise.all([
     db.select().from(events).where(eq(events.sportsfestId, sportsfestId)).orderBy(asc(events.name)),
     db
-      .select({ eventId: categories.eventId, name: categories.name, id: categories.id })
+      .select({
+        eventId: categories.eventId,
+        name: categories.name,
+        groupName: categories.groupName,
+        id: categories.id,
+      })
       .from(categories)
       .innerJoin(events, eq(events.id, categories.eventId))
       .where(eq(events.sportsfestId, sportsfestId))
@@ -180,7 +186,7 @@ export async function listEventsAdmin(db: Db, sportsfestId: number) {
     const mine = cats.filter((c) => c.eventId === e.id);
     return {
       ...e,
-      categories: mine.map((c) => c.name),
+      categories: mine.map(categoryLabel),
       finished: mine.filter((c) => done.has(c.id)).length,
     };
   });
@@ -266,20 +272,23 @@ export async function eventHasResults(db: Db, eventId: number) {
   return (row?.n ?? 0) > 0;
 }
 
-export async function addCategory(db: Db, eventId: number, name: string, sort: number) {
-  await db.insert(categories).values({ eventId, name, sort });
+export async function addCategory(
+  db: Db,
+  eventId: number,
+  c: { name: string; groupName: string | null; sort: number },
+) {
+  await db.insert(categories).values({ eventId, ...c });
 }
 
 export async function renameCategory(
   db: Db,
   eventId: number,
   id: number,
-  name: string,
-  sort: number,
+  c: { name: string; groupName: string | null; sort: number },
 ) {
   await db
     .update(categories)
-    .set({ name, sort })
+    .set(c)
     .where(and(eq(categories.id, id), eq(categories.eventId, eventId)));
 }
 

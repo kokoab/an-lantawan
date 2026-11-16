@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  categoryLabel,
   countWords,
   festivalDay,
   filterRows,
   formatName,
   formatScore,
+  groupCategories,
   manilaDay,
   ordinal,
   pointsRuleText,
@@ -236,5 +238,41 @@ describe('pointsRuleText', () => {
     expect(pointsRuleText({ win: 3, draw: 1, loss: 1 })).toBe(
       '3 points for a win, 1 for a draw, 1 for a loss',
     );
+  });
+});
+
+describe('categoryLabel', () => {
+  it('names the group after the category', () => {
+    expect(categoryLabel({ name: '50m freestyle', groupName: "Men's" })).toBe(
+      "50m freestyle, Men's",
+    );
+    expect(categoryLabel({ name: "Women's", groupName: null })).toBe("Women's");
+    expect(categoryLabel({ name: 'Open', groupName: '  ' })).toBe('Open');
+  });
+});
+
+describe('groupCategories', () => {
+  it('keeps ungrouped categories first, then each group in the order it appears', () => {
+    const cats = [
+      { id: 1, groupName: "Men's" },
+      { id: 2, groupName: null },
+      { id: 3, groupName: "Women's" },
+      { id: 4, groupName: "Men's" },
+      { id: 5, groupName: '' },
+    ];
+    expect(groupCategories(cats).map((g) => [g.heading, g.categories.map((c) => c.id)])).toEqual([
+      [null, [2, 5]],
+      ["Men's", [1, 4]],
+      ["Women's", [3]],
+    ]);
+  });
+
+  it('treats the same group typed with stray spaces as one group', () => {
+    const groups = groupCategories([{ groupName: "Men's" }, { groupName: " Men's " }]);
+    expect(groups).toHaveLength(1);
+  });
+
+  it('returns nothing for an event with no categories', () => {
+    expect(groupCategories([])).toEqual([]);
   });
 });

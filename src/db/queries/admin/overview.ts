@@ -1,4 +1,5 @@
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { categoryLabel } from '../../../core/sportsfest/display';
 import type { Db } from '../../client';
 import {
   categories,
@@ -90,7 +91,13 @@ export async function listOngoing(db: Db) {
     .limit(1);
   if (!sf) return null;
   const cats = await db
-    .select({ id: categories.id, name: categories.name, event: events.name, eventId: events.id })
+    .select({
+      id: categories.id,
+      name: categories.name,
+      groupName: categories.groupName,
+      event: events.name,
+      eventId: events.id,
+    })
     .from(categories)
     .innerJoin(events, eq(events.id, categories.eventId))
     .where(and(eq(events.sportsfestId, sf.id), eq(events.status, 'ongoing')))
@@ -112,6 +119,10 @@ export async function listOngoing(db: Db) {
     : [];
   return {
     sportsfest: sf,
-    rows: cats.map((c) => ({ ...c, live: live.find((l) => l.categoryId === c.id)?.stage ?? null })),
+    rows: cats.map((c) => ({
+      ...c,
+      name: categoryLabel(c),
+      live: live.find((l) => l.categoryId === c.id)?.stage ?? null,
+    })),
   };
 }

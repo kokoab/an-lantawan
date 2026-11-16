@@ -85,6 +85,11 @@ export const categories = sqliteTable('categories', {
     .notNull()
     .references(() => events.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  /**
+   * Optional heading that groups categories, for events with many: Swimming's "Men's" over
+   * "50m freestyle" and "100m backstroke". Categories without one sit ungrouped.
+   */
+  groupName: text('group_name'),
   sort: integer('sort').notNull().default(0),
   /**
    * Off: each tribu gets one place. On: editors enter how many golds, silvers and bronzes

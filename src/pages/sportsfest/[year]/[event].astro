@@ -6,8 +6,10 @@ import SportsfestHead from '../../../components/sportsfest/SportsfestHead.astro'
 import TribuChip from '../../../components/sportsfest/TribuChip.astro';
 import TribuMark from '../../../components/sportsfest/TribuMark.astro';
 import {
+  categoryLabel,
   formatName,
   formatScore,
+  groupCategories,
   manilaDay,
   pointsRuleText,
   ROW_STATE_LABEL,
@@ -120,7 +122,7 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
 ---
 
 <Site
-  title={`${event.name}${category && page.categories.length > 1 ? `, ${category.name}` : ''}, ${sf.name}`}
+  title={`${event.name}${category && page.categories.length > 1 ? `, ${categoryLabel(category)}` : ''}, ${sf.name}`}
   description={`Results of ${event.name} at ${sf.name}.`}
   current="sports"
 >
@@ -128,14 +130,19 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
     {
       page.categories.length > 1 && (
         <nav class="categories" aria-label="Categories">
-          {page.categories.map((c) => (
-            <a
-              class:list={['btn', c.id === category?.id ? 'btn-primary' : 'btn-secondary']}
-              href={eventUrl(sf.year, event.slug, c.id)}
-              aria-current={c.id === category?.id ? 'page' : undefined}
-            >
-              {c.name}
-            </a>
+          {groupCategories(page.categories).map((g) => (
+            <div class="category-group">
+              {g.heading && <span class="category-heading">{g.heading}</span>}
+              {g.categories.map((c) => (
+                <a
+                  class:list={['btn', c.id === category?.id ? 'btn-primary' : 'btn-secondary']}
+                  href={eventUrl(sf.year, event.slug, c.id)}
+                  aria-current={c.id === category?.id ? 'page' : undefined}
+                >
+                  {c.name}
+                </a>
+              ))}
+            </div>
           ))}
         </nav>
       )
@@ -301,10 +308,22 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
     color: var(--grey-600);
   }
   .categories {
+    display: grid;
+    gap: 8px;
+  }
+  .category-group {
     display: flex;
+    align-items: center;
     gap: 8px;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+  .category-heading {
+    flex: none;
+    min-width: 64px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--grey-600);
   }
   .categories .btn {
     padding: 10px 16px;

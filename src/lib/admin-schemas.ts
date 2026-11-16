@@ -195,6 +195,7 @@ export const eventForm = z.object({
 
 export const categoryForm = z.object({
   name: text(60, 'Name the category, like Women’s.'),
+  groupName: optionalText(40),
   sort: wholeNumber(0, 99),
 });
 

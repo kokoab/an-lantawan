@@ -1,0 +1,1 @@
+ALTER TABLE `categories` ADD `group_name` text;

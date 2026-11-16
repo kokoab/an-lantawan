@@ -189,3 +189,31 @@ export function pointsRuleText(rule: { win: number; draw: number; loss: number }
   if (rule.loss !== 0) parts.push(`${formatScore(rule.loss)} for a loss`);
   return parts.join(', ');
 }
+
+/** A category as it reads on its own: "50m freestyle, Men's", or just "Men's". */
+export function categoryLabel(c: { name: string; groupName: string | null }) {
+  const group = c.groupName?.trim();
+  return group ? `${c.name}, ${group}` : c.name;
+}
+
+/**
+ * Categories in their groups, in the order they come: ungrouped ones first as a group
+ * with no heading, then each named group where its first category sits.
+ */
+export function groupCategories<T extends { groupName: string | null }>(
+  cats: readonly T[],
+): Array<{ heading: string | null; categories: T[] }> {
+  const groups = new Map<string, { heading: string | null; categories: T[] }>();
+  const loose: T[] = [];
+  for (const c of cats) {
+    const heading = c.groupName?.trim() || null;
+    if (!heading) {
+      loose.push(c);
+      continue;
+    }
+    const g = groups.get(heading) ?? { heading, categories: [] };
+    g.categories.push(c);
+    groups.set(heading, g);
+  }
+  return [...(loose.length ? [{ heading: null, categories: loose }] : []), ...groups.values()];
+}

@@ -3,7 +3,12 @@ import Field from '../../../../components/admin/Field.astro';
 import TribuMark from '../../../../components/sportsfest/TribuMark.astro';
 import { parseForm, toDateTimeInput } from '../../../../core/forms';
 import { clearResult, recordResult } from '../../../../core/sportsfest/bracket';
-import { formatScore, pointsRuleText } from '../../../../core/sportsfest/display';
+import {
+  categoryLabel,
+  formatScore,
+  groupCategories,
+  pointsRuleText,
+} from '../../../../core/sportsfest/display';
 import {
   elimsAndPlayoffMedals,
   PLAYOFF_SIZES,
@@ -141,17 +146,17 @@ if (Astro.request.method === 'POST') {
     const parsed = parseForm(categoryForm, form);
     if (!parsed.ok) problem = Object.values(parsed.errors)[0] ?? 'Check the category.';
     else if (intent === 'add-category') {
-      await addCategory(db, event.id, parsed.data.name, parsed.data.sort);
-      await log(`Added the ${parsed.data.name} category to ${event.name}`);
+      await addCategory(db, event.id, parsed.data);
+      await log(`Added the ${categoryLabel(parsed.data)} category to ${event.name}`);
       return doneRedirect(Astro, base, 'created');
     } else if (category) {
-      await renameCategory(db, event.id, category.id, parsed.data.name, parsed.data.sort);
-      await log(`Renamed a category of ${event.name} to ${parsed.data.name}`);
+      await renameCategory(db, event.id, category.id, parsed.data);
+      await log(`Renamed a category of ${event.name} to ${categoryLabel(parsed.data)}`);
       return doneRedirect(Astro, here, 'saved');
     }
   } else if (intent === 'delete-category' && category) {
     await deleteCategory(db, event.id, category.id);
-    await log(`Removed the ${category.name} category from ${event.name}`);
+    await log(`Removed the ${categoryLabel(category)} category from ${event.name}`);
     return doneRedirect(Astro, base, 'deleted');
   } else if (category && intent === 'results' && category.customMedals) {
     problem = 'This category uses custom medals. Reload the page to see them.';
@@ -167,7 +172,7 @@ if (Astro.request.method === 'POST') {
     if (!r.ok) problem = r.error;
     else {
       await saveFinishes(db, category.id, r.finishes);
-      await log(`Saved results of ${event.name}, ${category.name}`);
+      await log(`Saved results of ${event.name}, ${categoryLabel(category)}`);
       return doneRedirect(Astro, here, 'result');
     }
   } else if (category && intent === 'medal-counts') {
@@ -183,7 +188,7 @@ if (Astro.request.method === 'POST') {
     else if (!r.ok) problem = r.error;
     else {
       await saveMedalCounts(db, category.id, r.counts);
-      await log(`Saved medals of ${event.name}, ${category.name}`);
+      await log(`Saved medals of ${event.name}, ${categoryLabel(category)}`);
       return doneRedirect(Astro, here, 'result');
     }
   } else if (category && intent === 'custom-medals') {
@@ -194,7 +199,7 @@ if (Astro.request.method === 'POST') {
       : countsToFinishes(current as MedalCount[]).map((f) => ({ ...f, count: 1 }));
     await setCustomMedals(db, category.id, on, rows);
     await log(
-      `${on ? 'Turned on' : 'Turned off'} custom medals for ${event.name}, ${category.name}`,
+      `${on ? 'Turned on' : 'Turned off'} custom medals for ${event.name}, ${categoryLabel(category)}`,
     );
     return doneRedirect(Astro, here, 'saved');
   } else if (category && intent === 'fill-results') {
@@ -218,7 +223,7 @@ if (Astro.request.method === 'POST') {
       problem = 'Some matches haven’t been played yet, so the places can’t be filled in.';
     else {
       await saveFinishes(db, category.id, finishes);
-      await log(`Filled in medals of ${event.name}, ${category.name} from the matches`);
+      await log(`Filled in medals of ${event.name}, ${categoryLabel(category)} from the matches`);
       return doneRedirect(Astro, here, 'result');
     }
   } else if (category && intent === 'create-competition') {
@@ -261,7 +266,7 @@ if (Astro.request.method === 'POST') {
           playoffs: elims > 0,
         });
       }
-      await log(`Set up the matches of ${event.name}, ${category.name}`);
+      await log(`Set up the matches of ${event.name}, ${categoryLabel(category)}`);
       return doneRedirect(Astro, here, 'generated');
     }
   } else if (category && intent === 'send-to-playoffs') {
@@ -281,7 +286,7 @@ if (Astro.request.method === 'POST') {
       else {
         await setFirstRound(db, comp, draw.value);
         await log(
-          `Sent the top ${round.length * 2} of ${event.name}, ${category.name} to the playoffs`,
+          `Sent the top ${round.length * 2} of ${event.name}, ${categoryLabel(category)} to the playoffs`,
         );
         return doneRedirect(Astro, `${here}#draw`, 'advanced');
       }
@@ -311,12 +316,12 @@ if (Astro.request.method === 'POST') {
       problem = 'A bye can’t be swapped. Set up the matches again to change who gets the bye.';
     else {
       await swapSlots(db, a, b);
-      await log(`Changed the draw of ${event.name}, ${category.name}`);
+      await log(`Changed the draw of ${event.name}, ${categoryLabel(category)}`);
       return doneRedirect(Astro, `${here}#draw`, 'swapped');
     }
   } else if (category && intent === 'delete-competition') {
     await deleteCompetition(db, category.id);
-    await log(`Removed the matches of ${event.name}, ${category.name}`);
+    await log(`Removed the matches of ${event.name}, ${categoryLabel(category)}`);
     return doneRedirect(Astro, here, 'deleted');
   } else if (category && intent === 'points') {
     const rule = parseForm(pointsForm, form);
@@ -364,7 +369,7 @@ if (Astro.request.method === 'POST') {
           await recordGroupResult(db, match.id, d.homeScore, d.awayScore);
         }
         if (!problem) {
-          await log(`Updated a match of ${event.name}, ${category.name}`);
+          await log(`Updated a match of ${event.name}, ${categoryLabel(category)}`);
           return doneRedirect(Astro, `${here}#match-${match.id}`, scored ? 'result' : 'saved');
         }
       }
@@ -429,10 +434,15 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
   {problem && <p class="admin-error-summary" role="alert">{problem}</p>}
 
   <nav class="tabs" aria-label="Categories">
-    {event.categories.map((c) => (
-      <a class:list={['btn', c.id === category?.id ? 'btn-primary' : 'btn-secondary']} href={`${base}?category=${c.id}`} aria-current={c.id === category?.id ? 'page' : undefined}>
-        {c.name}
-      </a>
+    {groupCategories(event.categories).map((g) => (
+      <div class="tab-group">
+        {g.heading && <span class="tab-heading">{g.heading}</span>}
+        {g.categories.map((c) => (
+          <a class:list={['btn', c.id === category?.id ? 'btn-primary' : 'btn-secondary']} href={`${base}?category=${c.id}`} aria-current={c.id === category?.id ? 'page' : undefined}>
+            {c.name}
+          </a>
+        ))}
+      </div>
     ))}
   </nav>
 
@@ -443,7 +453,7 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
           <>
             <section class="panel">
               <div class="panel-head">
-                <h2>Results: {category.name}</h2>
+                <h2>Results: {categoryLabel(category)}</h2>
                 <form method="post">
                   <input type="hidden" name="intent" value="custom-medals" />
                   <button
@@ -722,14 +732,15 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
         {category && (
           <form class="form" method="post">
             <input type="hidden" name="intent" value="rename-category" />
+            <Field name="name" id="cat-name" label={`Rename ${categoryLabel(category)}`} value={category.name} />
             <div class="row two">
-              <Field name="name" id="cat-name" label={`Rename ${category.name}`} value={category.name} />
+              <Field name="groupName" id="cat-group" label="Group (optional)" value={category.groupName ?? ''} hint="Puts categories under one heading, like Men’s." />
               <Field name="sort" id="cat-sort" label="Order" type="number" min={0} max={99} value={category.sort} />
             </div>
             <div class="form-actions">
               <button class="btn btn-secondary" type="submit">Save category</button>
               {event.categories.length > 1 && (
-                <button class="btn btn-danger" type="submit" name="intent" value="delete-category" data-confirm={`Remove ${category.name} with its results and matches?`}>
+                <button class="btn btn-danger" type="submit" name="intent" value="delete-category" data-confirm={`Remove ${categoryLabel(category)} with its results and matches?`}>
                   Remove
                 </button>
               )}
@@ -738,8 +749,9 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
         )}
         <form class="form add-cat" method="post">
           <input type="hidden" name="intent" value="add-category" />
+          <Field name="name" id="new-cat" label="Add a category" placeholder="Women’s, or 50m freestyle" />
           <div class="row two">
-            <Field name="name" id="new-cat" label="Add a category" placeholder="Women’s" />
+            <Field name="groupName" id="new-group" label="Group (optional)" placeholder="Men’s" value={category?.groupName ?? ''} />
             <Field name="sort" id="new-sort" label="Order" type="number" min={0} max={99} value={event.categories.length} />
           </div>
           <div class="form-actions"><button class="btn btn-secondary" type="submit">Add category</button></div>
@@ -760,10 +772,21 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
 
 <style>
   .tabs {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
     gap: 8px;
     margin-bottom: 16px;
+  }
+  .tab-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .tab-heading {
+    min-width: 72px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--grey-600);
   }
   .tribu {
     display: inline-flex;

@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, lte, ne, or } from 'drizzle-orm';
+import { categoryLabel } from '../../core/sportsfest/display';
 import { type Medal, medalTally } from '../../core/sportsfest/tally';
 import type { Db } from '../client';
 import {
@@ -130,6 +131,7 @@ export async function listEventRows(db: Db, sportsfestId: number): Promise<Event
         },
         categoryId: categories.id,
         category: categories.name,
+        groupName: categories.groupName,
       })
       .from(categories)
       .innerJoin(events, eq(events.id, categories.eventId))
@@ -142,8 +144,10 @@ export async function listEventRows(db: Db, sportsfestId: number): Promise<Event
     const at = (p: Medal) => here.filter((m) => m.place === p).map((m) => m.tribuId);
     const count = (p: Medal) =>
       Object.fromEntries(here.filter((m) => m.place === p).map((m) => [m.tribuId, m.count]));
+    const { groupName, ...row } = r;
     return {
-      ...r,
+      ...row,
+      category: categoryLabel({ name: r.category, groupName }),
       medals: { 1: at(1), 2: at(2), 3: at(3) },
       counts: { 1: count(1), 2: count(2), 3: count(3) },
     };
@@ -159,7 +163,12 @@ export async function getEvent(db: Db, sportsfestId: number, slug: string, categ
     .limit(1);
   if (!event) return null;
   const cats = await db
-    .select({ id: categories.id, name: categories.name, customMedals: categories.customMedals })
+    .select({
+      id: categories.id,
+      name: categories.name,
+      groupName: categories.groupName,
+      customMedals: categories.customMedals,
+    })
     .from(categories)
     .where(eq(categories.eventId, event.id))
     .orderBy(categories.sort, categories.name);
@@ -249,7 +258,7 @@ export async function getTribu(db: Db, slug: string) {
 
 /** A tribu's matches that are still to be played or under way, soonest first. */
 export async function listNextMatches(db: Db, sportsfestId: number, tribuId: number, limit = 3) {
-  return db
+  const rows = await db
     .select({
       id: matches.id,
       status: matches.status,
@@ -261,6 +270,7 @@ export async function listNextMatches(db: Db, sportsfestId: number, tribuId: num
       awayScore: matches.awayScore,
       stage: stages.name,
       category: categories.name,
+      groupName: categories.groupName,
       event: events.name,
       eventSlug: events.slug,
       eventVenue: events.venue,
@@ -278,4 +288,8 @@ export async function listNextMatches(db: Db, sportsfestId: number, tribuId: num
     )
     .orderBy(desc(eq(matches.status, 'ongoing')), asc(matches.startsAt))
     .limit(limit);
+  return rows.map(({ groupName, ...m }) => ({
+    ...m,
+    category: categoryLabel({ name: m.category, groupName }),
+  }));
 }
