@@ -1,5 +1,19 @@
+import { type PhotoWidth, variantWidths } from '../core/media';
+
 /** Where an uploaded file is served from. Keys are unique per upload, so URLs never go stale. */
 export const mediaUrl = (key: string) => `/media/${key}`;
+
+/** A photo's smaller WebP copy, or the original when it has none. */
+export const photoUrl = (key: string, width: PhotoWidth) => `${mediaUrl(key)}?w=${width}`;
+
+/**
+ * The srcset of a photo: its smaller copies, then the original at its own width, so each
+ * screen downloads the smallest file that still looks sharp.
+ */
+export function photoSrcset(key: string, width: number | null, mime = 'image/jpeg') {
+  const copies = variantWidths(width, mime).map((w) => `${photoUrl(key, w)} ${w}w`);
+  return [...copies, ...(width ? [`${mediaUrl(key)} ${width}w`] : [])].join(', ') || undefined;
+}
 
 export const storyUrl = (s: { slug: string; section: { slug: string } }) =>
   `/${s.section.slug}/${s.slug}`;

@@ -5,7 +5,7 @@
  */
 import type { Issue } from '../../db/queries/issues';
 import { formatMonth } from '../../lib/format';
-import { mediaUrl } from '../../lib/urls';
+import { photoUrl } from '../../lib/urls';
 
 interface Props {
   issue: Pick<Issue, 'kind' | 'title' | 'publishedOn' | 'coverKey'>;
@@ -19,7 +19,7 @@ const kindLabel = issue.kind === 'newsletter' ? 'Newsletter' : 'Special publicat
 {
   issue.coverKey ? (
     <div class:list={['cover', 'image', large && 'large']}>
-      <img src={mediaUrl(issue.coverKey)} alt={`Cover of ${issue.title}`} loading={large ? 'eager' : 'lazy'} />
+      <img src={photoUrl(issue.coverKey, large ? 960 : 480)} alt={`Cover of ${issue.title}`} loading={large ? 'eager' : 'lazy'} decoding="async" />
     </div>
   ) : (
     <div class:list={['cover', 'designed', issue.kind, large && 'large']} aria-hidden="true">

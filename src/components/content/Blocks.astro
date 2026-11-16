@@ -1,7 +1,7 @@
 ---
 /** Renders story blocks. Only these elements are ever produced; stored text is always escaped. */
 import type { Block, Embed } from '../../core/content/doc';
-import { mediaUrl } from '../../lib/urls';
+import { mediaUrl, photoSrcset } from '../../lib/urls';
 import ChartBlock from './ChartBlock.astro';
 import Inlines from './Inlines.astro';
 
@@ -64,7 +64,7 @@ function embedSrc(e: Embed): string | null {
       case 'image':
         return b.attrs.key ? (
           <figure>
-            <img src={mediaUrl(b.attrs.key)} alt={b.attrs.alt} loading="lazy" decoding="async" />
+            <img src={mediaUrl(b.attrs.key)} srcset={photoSrcset(b.attrs.key, null)} sizes="(min-width: 768px) 720px, 100vw" alt={b.attrs.alt} loading="lazy" decoding="async" />
             {b.attrs.caption && <figcaption>{b.attrs.caption}</figcaption>}
           </figure>
         ) : null;

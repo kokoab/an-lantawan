@@ -5,7 +5,7 @@ import { getEditorialBoard } from '../db/queries/people';
 import { getSettings } from '../db/queries/settings';
 import { currentPrompt } from '../db/queries/sumat';
 import Site from '../layouts/Site.astro';
-import { mediaUrl } from '../lib/urls';
+import { photoUrl } from '../lib/urls';
 
 const [s, board, prompt] = await Promise.all([
   getSettings(
@@ -66,13 +66,13 @@ const year = board.year?.replace(/\s*[-–]\s*/, '⁠–⁠');
             <li>
               {m.hasProfile ? (
                 <a class="member" href={`/people/${m.slug}`}>
-                  <span class="portrait">{m.photoKey && <img src={mediaUrl(m.photoKey)} alt="" loading="lazy" />}</span>
+                  <span class="portrait">{m.photoKey && <img src={photoUrl(m.photoKey, 480)} alt="" loading="lazy" decoding="async" />}</span>
                   <span class="name">{m.name}</span>
                   <span class="position">{m.position}</span>
                 </a>
               ) : (
                 <div class="member">
-                  <span class="portrait">{m.photoKey && <img src={mediaUrl(m.photoKey)} alt="" loading="lazy" />}</span>
+                  <span class="portrait">{m.photoKey && <img src={photoUrl(m.photoKey, 480)} alt="" loading="lazy" decoding="async" />}</span>
                   <span class="name">{m.name}</span>
                   <span class="position">{m.position}</span>
                 </div>

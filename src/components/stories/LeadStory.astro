@@ -17,7 +17,7 @@ const href = storyUrl(story);
 <section class="band framed lead" aria-labelledby="lead-title">
   <div class="inner">
     <a class="lead-photo-link" href={href} tabindex="-1" aria-hidden="true">
-      <StoryPhoto cover={story.cover} class="lead-photo" eager />
+      <StoryPhoto cover={story.cover} class="lead-photo" eager sizes="(min-width: 1024px) 800px, 100vw" />
     </a>
     <div class="text">
       <span class="pill">{label}</span>

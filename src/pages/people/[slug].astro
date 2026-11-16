@@ -6,7 +6,7 @@ import { db } from '../../db/client';
 import { getPerson } from '../../db/queries/people';
 import { listStoriesBy } from '../../db/queries/stories';
 import Site from '../../layouts/Site.astro';
-import { mediaUrl } from '../../lib/urls';
+import { photoUrl } from '../../lib/urls';
 
 const person = await getPerson(db, Astro.params.slug ?? '');
 const page = parsePage(Astro.url.searchParams.get('page'));
@@ -34,7 +34,7 @@ const href = (p: number) =>
     {
       photoKey && (
         <div class="photo">
-          <img src={mediaUrl(photoKey)} alt="" />
+          <img src={photoUrl(photoKey, 960)} alt="" />
         </div>
       )
     }

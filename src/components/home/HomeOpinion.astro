@@ -39,7 +39,7 @@ const byline = (p: Piece) => {
         <article class:list={['featured', !featured.cover && 'text-only']}>
           {featured.cover && (
             <a class="cartoon" href={storyUrl(featured)} tabindex="-1" aria-hidden="true">
-              <StoryPhoto cover={featured.cover} class="cartoon-photo" />
+              <StoryPhoto cover={featured.cover} class="cartoon-photo" sizes="(min-width: 1024px) 640px, 100vw" />
             </a>
           )}
           <div class="text">

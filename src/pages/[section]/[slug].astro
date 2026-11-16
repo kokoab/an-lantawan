@@ -81,7 +81,7 @@ const image = story.cover ? mediaUrl(story.cover.key) : undefined;
       ) : (
         story.cover && (
           <figure class="lead-photo">
-            <StoryPhoto cover={story.cover} class="lead-photo-img" eager />
+            <StoryPhoto cover={story.cover} class="lead-photo-img" eager sizes="(min-width: 1024px) 1200px, 100vw" />
             {coverCaption && <figcaption>{coverCaption}</figcaption>}
           </figure>
         )

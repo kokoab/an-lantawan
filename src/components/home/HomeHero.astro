@@ -22,7 +22,7 @@ const isExplainer = lead.kind === 'explainer';
 <section class="band framed hero">
   <article class="lead">
     <a class="lead-photo-link" href={href} tabindex="-1" aria-hidden="true">
-      <StoryPhoto cover={lead.cover} class="lead-photo" eager />
+      <StoryPhoto cover={lead.cover} class="lead-photo" eager sizes="(min-width: 1024px) 800px, 100vw" />
     </a>
     <div class="text">
       <span class="pill">{storyLabel(lead)}</span>

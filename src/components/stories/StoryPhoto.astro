@@ -1,15 +1,22 @@
 ---
 import type { StorySummary } from '../../db/queries/stories';
-import { focalClasses, mediaUrl, showWhole } from '../../lib/urls';
+import { focalClasses, mediaUrl, photoSrcset, showWhole } from '../../lib/urls';
 
 interface Props {
   cover: StorySummary['cover'];
   class?: string;
   /** The first photo on a page loads right away; the rest load as they scroll in. */
   eager?: boolean;
+  /** How wide the photo shows, so the browser picks the right copy. Defaults to a card. */
+  sizes?: string;
 }
 
-const { cover, class: className, eager = false } = Astro.props;
+const {
+  cover,
+  class: className,
+  eager = false,
+  sizes = '(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw',
+} = Astro.props;
 ---
 
 <div class:list={['photo', className, cover && showWhole(cover) && 'whole']}>
@@ -17,6 +24,8 @@ const { cover, class: className, eager = false } = Astro.props;
     cover && (
       <img
         src={mediaUrl(cover.key)}
+        srcset={photoSrcset(cover.key, cover.width)}
+        sizes={sizes}
         alt={cover.alt ?? ''}
         loading={eager ? 'eager' : 'lazy'}
         decoding="async"
