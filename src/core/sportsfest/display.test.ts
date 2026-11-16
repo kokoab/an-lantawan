@@ -204,7 +204,11 @@ describe('formatName', () => {
     expect(formatName('bracket', ['single', 'final'])).toBe('Single elimination');
     expect(formatName('bracket', ['upper', 'lower', 'final'])).toBe('Double elimination');
     expect(formatName('mind', ['group'])).toBe('Round robin');
-    expect(formatName('bracket', ['group', 'single'])).toBe('Groups, then knockout');
+    expect(formatName('bracket', ['group', 'single'])).toBe('Elims, then playoffs');
+    expect(formatName('bracket', ['group', 'upper', 'lower', 'final'])).toBe(
+      'Elims, then playoffs',
+    );
+    expect(formatName('bracket', ['group'], 2)).toBe('Double round robin');
     expect(formatName('race', [])).toBe('Timed final');
     expect(formatName('judged', [])).toBe('Judged');
   });

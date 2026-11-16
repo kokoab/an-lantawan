@@ -162,12 +162,12 @@ export type StageKind = 'single' | 'upper' | 'lower' | 'final' | 'group';
 export type EventType = 'bracket' | 'race' | 'judged' | 'mind';
 
 /** The format line on an event page, from how its competition is set up. */
-export function formatName(type: EventType, stageKinds: readonly StageKind[]) {
-  if (stageKinds.includes('lower')) return 'Double elimination';
+export function formatName(type: EventType, stageKinds: readonly StageKind[], legs = 1) {
   if (stageKinds.includes('group') && stageKinds.some((k) => k !== 'group')) {
-    return 'Groups, then knockout';
+    return 'Elims, then playoffs';
   }
-  if (stageKinds.includes('group')) return 'Round robin';
+  if (stageKinds.includes('lower')) return 'Double elimination';
+  if (stageKinds.includes('group')) return legs > 1 ? 'Double round robin' : 'Round robin';
   if (stageKinds.length) return 'Single elimination';
   return { bracket: 'Knockout', race: 'Timed final', judged: 'Judged', mind: 'Ranked' }[type];
 }

@@ -13,6 +13,7 @@ import {
   ROW_STATE_LABEL,
   rowState,
 } from '../../../core/sportsfest/display';
+import { legsOf } from '../../../core/sportsfest/format';
 import { standings } from '../../../core/sportsfest/standings';
 import { db } from '../../../db/client';
 import { getEvent, listCoverage } from '../../../db/queries/sportsfest';
@@ -53,6 +54,13 @@ const facts = [
     value: formatName(
       event.type,
       stages.map((s) => s.kind),
+      legsOf(
+        stages
+          .filter((s) => s.kind === 'group')
+          .flatMap((s) =>
+            s.matches.map((m): [number | null, number | null] => [m.homeTribuId, m.awayTribuId]),
+          ),
+      ),
     ),
   },
   event.venue && { label: 'Venue', value: event.venue },
