@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, inArray, isNull, lte, ne, or } from 'drizzle-orm';
-import { categoryLabel } from '../../core/sportsfest/display';
+import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { categoryLabel, shownCategory } from '../../core/sportsfest/display';
 import { type Medal, medalTally } from '../../core/sportsfest/tally';
 import type { Db } from '../client';
 import {
@@ -139,6 +139,8 @@ export async function listEventRows(db: Db, sportsfestId: number): Promise<Event
       .orderBy(asc(events.name), asc(categories.sort), asc(categories.name)),
     listPlacements(db, sportsfestId),
   ]);
+  const perEvent = new Map<number, number>();
+  for (const r of rows) perEvent.set(r.event.id, (perEvent.get(r.event.id) ?? 0) + 1);
   return rows.map((r) => {
     const here = medals.filter((m) => m.categoryId === r.categoryId);
     const at = (p: Medal) => here.filter((m) => m.place === p).map((m) => m.tribuId);
@@ -147,7 +149,10 @@ export async function listEventRows(db: Db, sportsfestId: number): Promise<Event
     const { groupName, ...row } = r;
     return {
       ...row,
-      category: categoryLabel({ name: r.category, groupName }),
+      category: shownCategory(
+        categoryLabel({ name: r.category, groupName }),
+        perEvent.get(r.event.id) ?? 1,
+      ),
       medals: { 1: at(1), 2: at(2), 3: at(3) },
       counts: { 1: count(1), 2: count(2), 3: count(3) },
     };
@@ -271,6 +276,7 @@ export async function listNextMatches(db: Db, sportsfestId: number, tribuId: num
       stage: stages.name,
       category: categories.name,
       groupName: categories.groupName,
+      categoriesInEvent: sql<number>`(select count(*) from categories c2 where c2.event_id = ${events.id})`,
       event: events.name,
       eventSlug: events.slug,
       eventVenue: events.venue,
@@ -288,8 +294,8 @@ export async function listNextMatches(db: Db, sportsfestId: number, tribuId: num
     )
     .orderBy(desc(eq(matches.status, 'ongoing')), asc(matches.startsAt))
     .limit(limit);
-  return rows.map(({ groupName, ...m }) => ({
+  return rows.map(({ groupName, categoriesInEvent, ...m }) => ({
     ...m,
-    category: categoryLabel({ name: m.category, groupName }),
+    category: shownCategory(categoryLabel({ name: m.category, groupName }), categoriesInEvent),
   }));
 }

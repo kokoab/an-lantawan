@@ -48,7 +48,7 @@ const games = [
     live: m.status === 'ongoing',
     when: when(m.startsAt),
     venue: m.venue ?? m.eventVenue,
-    title: `${m.event}, ${m.category.toLowerCase()}`,
+    title: m.category ? `${m.event}, ${m.category.toLowerCase()}` : m.event,
     detail: m.stage,
     href: eventUrl(sf.year, m.eventSlug),
     sides: [

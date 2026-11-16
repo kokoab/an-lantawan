@@ -13,6 +13,7 @@ import {
   roundName,
   rowState,
   scheduleDays,
+  shownCategory,
   tribuInitial,
   tribuTile,
 } from './display';
@@ -274,5 +275,13 @@ describe('groupCategories', () => {
 
   it('returns nothing for an event with no categories', () => {
     expect(groupCategories([])).toEqual([]);
+  });
+});
+
+describe('shownCategory', () => {
+  it('hides the only category of an event', () => {
+    expect(shownCategory('Open', 1)).toBe('');
+    expect(shownCategory("Men's", 2)).toBe("Men's");
+    expect(shownCategory('Open', 0)).toBe('');
   });
 });

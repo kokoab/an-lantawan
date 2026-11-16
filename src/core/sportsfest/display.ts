@@ -217,3 +217,10 @@ export function groupCategories<T extends { groupName: string | null }>(
   }
   return [...(loose.length ? [{ heading: null, categories: loose }] : []), ...groups.values()];
 }
+
+/**
+ * The category as lists show it beside the event's name. An event with one category (the
+ * "Open" made when none are named) shows none: "Badminton", not "Badminton Open".
+ */
+export const shownCategory = (label: string, categoriesInEvent: number) =>
+  categoriesInEvent > 1 ? label : '';
