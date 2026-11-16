@@ -66,9 +66,11 @@ const dayMonth = new Intl.DateTimeFormat('en-US', {
               </>
             )}
           </p>
-          <a class="btn btn-sunrise" href="/sumat">
-            Write to Sumat
-          </a>
+          {prompt && (
+            <a class="btn btn-sunrise" href="/sumat">
+              Write to Sumat
+            </a>
+          )}
         </div>
       ) : (
         <>

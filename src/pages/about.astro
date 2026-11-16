@@ -3,10 +3,11 @@ import { settingDefaults } from '../core/settings';
 import { db } from '../db/client';
 import { getEditorialBoard } from '../db/queries/people';
 import { getSettings } from '../db/queries/settings';
+import { currentPrompt } from '../db/queries/sumat';
 import Site from '../layouts/Site.astro';
 import { mediaUrl } from '../lib/urls';
 
-const [s, board] = await Promise.all([
+const [s, board, prompt] = await Promise.all([
   getSettings(
     db,
     settingDefaults(
@@ -22,6 +23,7 @@ const [s, board] = await Promise.all([
     ),
   ),
   getEditorialBoard(db),
+  currentPrompt(db),
 ]);
 // "2025–2026" with non-breaking joins so the years never split across lines.
 const year = board.year?.replace(/\s*[-–]\s*/, '⁠–⁠');
@@ -95,7 +97,7 @@ const year = board.year?.replace(/\s*[-–]\s*/, '⁠–⁠');
           </div>
         ))}
       </dl>
-      <a class="btn btn-sunrise" href="/sumat">Write to Sumat</a>
+      {prompt && <a class="btn btn-sunrise" href="/sumat">Write to Sumat</a>}
     </div>
   </section>
 
