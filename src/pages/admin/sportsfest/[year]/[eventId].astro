@@ -2,13 +2,16 @@
 import Field from '../../../../components/admin/Field.astro';
 import TribuMark from '../../../../components/sportsfest/TribuMark.astro';
 import { parseForm, toDateTimeInput } from '../../../../core/forms';
-import {
-  clearResult,
-  doubleElimination,
-  recordResult,
-  singleElimination,
-} from '../../../../core/sportsfest/bracket';
+import { clearResult, recordResult } from '../../../../core/sportsfest/bracket';
 import { formatScore, pointsRuleText } from '../../../../core/sportsfest/display';
+import {
+  elimsAndPlayoffMedals,
+  PLAYOFF_SIZES,
+  planMatches,
+  playoffDraw,
+  playoffEntrants,
+  readFormat,
+} from '../../../../core/sportsfest/format';
 import {
   bracketMedals,
   countsLoseMedals,
@@ -19,7 +22,7 @@ import {
   readMedalCounts,
   standingsFinishes,
 } from '../../../../core/sportsfest/medals';
-import { roundRobinRounds, standings } from '../../../../core/sportsfest/standings';
+import { standings } from '../../../../core/sportsfest/standings';
 import { db } from '../../../../db/client';
 import {
   addCategory,
@@ -31,9 +34,11 @@ import {
   deleteCompetition,
   deleteEvent,
   eventHasResults,
+  firstRound,
   getCompetition,
   getEventAdmin,
   getSportsfestRow,
+  knockoutStarted,
   listAllTribus,
   listFinishes,
   recordGroupResult,
@@ -41,6 +46,8 @@ import {
   saveFinishes,
   saveMedalCounts,
   setCustomMedals,
+  setFirstRound,
+  swapSlots,
   toBracket,
   updateEvent,
   updateMatchDetails,
@@ -66,9 +73,45 @@ const allTribus = await listAllTribus(db);
 const teams = allTribus.filter((t) => sf.tribuIds.includes(t.id));
 const byId = new Map(allTribus.map((t) => [t.id, t]));
 
+/** The elims (round-robin) table of a category, and how many of its matches are left. */
+function elimsTable(comp: Awaited<ReturnType<typeof getCompetition>>) {
+  const group = comp.stages.find((s) => s.kind === 'group');
+  if (!group) return null;
+  const mine = comp.matches.filter((m) => m.stageId === group.id);
+  const played = mine.flatMap((m) =>
+    m.status === 'done' &&
+    m.homeTribuId !== null &&
+    m.awayTribuId !== null &&
+    m.homeScore !== null &&
+    m.awayScore !== null
+      ? [
+          {
+            homeTribuId: m.homeTribuId,
+            awayTribuId: m.awayTribuId,
+            homeScore: m.homeScore,
+            awayScore: m.awayScore,
+          },
+        ]
+      : [],
+  );
+  const rows = standings(
+    comp.entries.filter((e) => e.stageId === group.id).map((e) => e.tribuId),
+    played,
+    { win: group.pointsWin, draw: group.pointsDraw, loss: group.pointsLoss },
+  );
+  const unplayed = mine.filter((m) => m.status !== 'done' && m.status !== 'cancelled').length;
+  return { rows, unplayed };
+}
+
 let eventValues: Record<string, unknown> = { ...event, startsAt: toDateTimeInput(event.startsAt) };
 let errors: Record<string, string> = {};
 let problem: string | null = null;
+let setup: Record<string, string> = {
+  elims: '0',
+  playoffs: 'knockout',
+  advance: '4',
+  bronze: 'match',
+};
 
 if (Astro.request.method === 'POST') {
   const form = await readForm(Astro.request);
@@ -156,39 +199,19 @@ if (Astro.request.method === 'POST') {
     return doneRedirect(Astro, here, 'saved');
   } else if (category && intent === 'fill-results') {
     const comp = await getCompetition(db, category.id);
-    const group = comp.stages.find((s) => s.kind === 'group');
-    const unplayed =
-      group &&
-      comp.matches.some(
-        (m) => m.stageId === group.id && m.status !== 'done' && m.status !== 'cancelled',
-      );
-    const finishes = unplayed
-      ? null
-      : group
-        ? standingsFinishes(
-            standings(
-              comp.entries.filter((e) => e.stageId === group.id).map((e) => e.tribuId),
-              comp.matches.flatMap((m) =>
-                m.stageId === group.id &&
-                m.status === 'done' &&
-                m.homeTribuId !== null &&
-                m.awayTribuId !== null &&
-                m.homeScore !== null &&
-                m.awayScore !== null
-                  ? [
-                      {
-                        homeTribuId: m.homeTribuId,
-                        awayTribuId: m.awayTribuId,
-                        homeScore: m.homeScore,
-                        awayScore: m.awayScore,
-                      },
-                    ]
-                  : [],
-              ),
-              { win: group.pointsWin, draw: group.pointsDraw, loss: group.pointsLoss },
-            ),
-          )
-        : bracketMedals(toBracket(comp));
+    const table = elimsTable(comp);
+    const hasKnockout = comp.stages.some((st) => st.kind !== 'group');
+    const inPlayoffs = firstRound(comp).flatMap((m) =>
+      [m.homeTribuId, m.awayTribuId].filter((id): id is number => id !== null),
+    );
+    const finishes =
+      table && hasKnockout
+        ? elimsAndPlayoffMedals(bracketMedals(toBracket(comp)), table.rows, inPlayoffs)
+        : table
+          ? table.unplayed > 0
+            ? null
+            : standingsFinishes(table.rows)
+          : bracketMedals(toBracket(comp));
     if (category.customMedals)
       problem = 'Turn off Customize medals to fill in places from the matches.';
     else if (!finishes)
@@ -199,34 +222,97 @@ if (Astro.request.method === 'POST') {
       return doneRedirect(Astro, here, 'result');
     }
   } else if (category && intent === 'create-competition') {
-    const format = one(form, 'format');
+    setup = Object.fromEntries(
+      ['elims', 'playoffs', 'advance', 'bronze'].map((k) => [k, one(form, k)]),
+    );
     const seeds = teams
       .map((_, i) => Number(one(form, `seed_${i + 1}`)))
       .filter((n) => teams.some((t) => t.id === n));
     const entrants = [...new Set(seeds)];
-    if (entrants.length < 2) problem = 'Choose at least two tribus.';
-    else if (format === 'roundrobin') {
-      const rule = parseForm(pointsForm, form);
-      await createRoundRobin(
-        db,
-        category.id,
-        entrants,
-        roundRobinRounds(entrants),
-        rule.ok ? rule.data : { win: 3, draw: 1, loss: 0 },
-      );
-      await log(`Set up a round robin for ${event.name}, ${category.name}`);
-      return doneRedirect(Astro, here, 'generated');
-    } else {
-      const made =
-        format === 'double'
-          ? doubleElimination(entrants)
-          : singleElimination(entrants, { thirdPlace: format === 'single3' });
-      if (!made.ok) problem = made.error;
-      else {
-        await createBracket(db, category.id, made.value);
-        await log(`Created the ${event.name}, ${category.name} bracket`);
-        return doneRedirect(Astro, here, 'generated');
+    const plan = readFormat(
+      {
+        elims: one(form, 'elims'),
+        playoffs: one(form, 'playoffs'),
+        advance: one(form, 'advance'),
+        bronze: one(form, 'bronze'),
+      },
+      entrants.length,
+    );
+    const made = plan.ok ? planMatches(plan.value, entrants) : plan;
+    const existing = await getCompetition(db, category.id);
+    if (existing.stages.length) problem = 'This category already has matches. Reload the page.';
+    else if (!plan.ok || !made.ok) problem = made.ok ? 'Check the format.' : made.error;
+    else {
+      const { elims, playoffs } = plan.value;
+      if (elims > 0) {
+        const rule = parseForm(pointsForm, form);
+        await createRoundRobin(
+          db,
+          category.id,
+          entrants,
+          made.value.rounds,
+          rule.ok ? rule.data : { win: 3, draw: 1, loss: 0 },
+          playoffs !== 'none' ? 'Elims' : elims === 2 ? 'Double round robin' : 'Round robin',
+        );
       }
+      if (made.value.bracket.length) {
+        await createBracket(db, category.id, made.value.bracket, {
+          firstSort: elims > 0 ? 1 : 0,
+          playoffs: elims > 0,
+        });
+      }
+      await log(`Set up the matches of ${event.name}, ${category.name}`);
+      return doneRedirect(Astro, here, 'generated');
+    }
+  } else if (category && intent === 'send-to-playoffs') {
+    const comp = await getCompetition(db, category.id);
+    const table = elimsTable(comp);
+    const round = firstRound(comp);
+    const double = comp.stages.some((st) => st.kind === 'upper');
+    // Without an upper bracket, a "final" stage is the third-place match (see bracketKey).
+    const third = !double && comp.stages.some((st) => st.kind === 'final');
+    if (!table || !round.length) problem = 'This category has no elims and playoffs.';
+    else if (knockoutStarted(comp))
+      problem = 'A playoff match already has a result, so the playoff tribus are fixed.';
+    else {
+      const top = playoffEntrants(table.rows, round.length * 2, table.unplayed);
+      const draw = top.ok ? playoffDraw(double ? 'double' : 'knockout', top.value, third) : top;
+      if (!draw.ok) problem = draw.error;
+      else {
+        await setFirstRound(db, comp, draw.value);
+        await log(
+          `Sent the top ${round.length * 2} of ${event.name}, ${category.name} to the playoffs`,
+        );
+        return doneRedirect(Astro, `${here}#draw`, 'advanced');
+      }
+    }
+  } else if (category && intent === 'swap') {
+    const comp = await getCompetition(db, category.id);
+    const round = firstRound(comp);
+    const read = (v: string) => {
+      const [id, slot] = v.split(':');
+      const m = round.find((x) => x.id === Number(id));
+      if (!m || (slot !== 'home' && slot !== 'away')) return null;
+      return {
+        id: m.id,
+        slot,
+        tribuId: slot === 'home' ? m.homeTribuId : m.awayTribuId,
+        match: m,
+      } as const;
+    };
+    const a = read(one(form, 'from'));
+    const b = read(one(form, 'to'));
+    if (a && b && a.id === b.id && a.slot === b.slot) return Astro.redirect(`${here}#draw`, 303);
+    if (!a || !b) problem = 'Those places are no longer in the draw. Reload the page.';
+    else if (knockoutStarted(comp))
+      problem =
+        'A match already has a result, so the draw is fixed. Change tribus in each match instead.';
+    else if (a.match.status === 'bye' || b.match.status === 'bye')
+      problem = 'A bye can’t be swapped. Set up the matches again to change who gets the bye.';
+    else {
+      await swapSlots(db, a, b);
+      await log(`Changed the draw of ${event.name}, ${category.name}`);
+      return doneRedirect(Astro, `${here}#draw`, 'swapped');
     }
   } else if (category && intent === 'delete-competition') {
     await deleteCompetition(db, category.id);
@@ -294,6 +380,13 @@ const placeOf = new Map(finishes.map((f) => [f.tribuId, f]));
 const countOf = (tribuId: number, place: number) =>
   finishes.find((f) => f.tribuId === tribuId && f.place === place)?.count ?? 0;
 const custom = category?.customMedals ?? false;
+const draw = comp ? firstRound(comp) : [];
+const drawLocked = comp ? knockoutStarted(comp) : false;
+const hasElims = comp?.stages.some((st) => st.kind === 'group') ?? false;
+const sizes = PLAYOFF_SIZES.filter((n) => n <= Math.max(2, teams.length)).map((n) => ({
+  value: String(n),
+  label: n === 2 ? 'Top 2 (a final)' : n === 4 ? 'Top 4 (semifinals and a final)' : `Top ${n}`,
+}));
 const losesMedals = custom && countsLoseMedals(finishes as MedalCount[]);
 const ev = (k: string) => (eventValues[k] ?? '') as string;
 const TYPES = [
@@ -437,15 +530,25 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
                   <p class="panel-note">Events decided by time, judges or ranking only need the results above. For games, set up the matches.</p>
                   <input type="hidden" name="intent" value="create-competition" />
                   <fieldset>
-                    <legend>Format</legend>
-                    <label class="check"><input type="radio" name="format" value="single3" checked /> Single elimination, with a third-place match</label>
-                    <label class="check"><input type="radio" name="format" value="single" /> Single elimination, both semifinal losers get bronze</label>
-                    <label class="check"><input type="radio" name="format" value="double" /> Double elimination (4, 8 or 16 tribus)</label>
-                    <label class="check"><input type="radio" name="format" value="roundrobin" /> Round robin: everyone plays everyone</label>
+                    <legend>Elims</legend>
+                    <p class="hint">Every tribu plays every other tribu. The table decides the medals, or who goes on to the playoffs.</p>
+                    <label class="check"><input type="radio" name="elims" value="0" checked={setup.elims === '0'} /> No elims</label>
+                    <label class="check"><input type="radio" name="elims" value="1" checked={setup.elims === '1'} /> Everyone plays everyone once (round robin)</label>
+                    <label class="check"><input type="radio" name="elims" value="2" checked={setup.elims === '2'} /> Everyone plays everyone twice (double round robin)</label>
                   </fieldset>
                   <fieldset>
+                    <legend>Playoffs</legend>
+                    <label class="check"><input type="radio" name="playoffs" value="none" checked={setup.playoffs === 'none'} /> No playoffs: the elims table decides the medals</label>
+                    <label class="check"><input type="radio" name="playoffs" value="knockout" checked={setup.playoffs === 'knockout'} /> Knockout: lose once and you’re out</label>
+                    <label class="check"><input type="radio" name="playoffs" value="double" checked={setup.playoffs === 'double'} /> Double elimination: out after two losses (4, 8 or 16 tribus)</label>
+                  </fieldset>
+                  <div class="row two">
+                    <Field name="advance" label="Tribus in the playoffs" type="select" options={sizes} value={setup.advance} hint="Only with elims. The best go on, and 1 plays 4, 2 plays 3." />
+                    <Field name="bronze" label="Bronze" type="select" options={[{ value: 'match', label: 'A third-place match' }, { value: 'shared', label: 'Both semifinal losers' }]} value={setup.bronze} hint="With only a final after elims, bronze goes to third in the elims." />
+                  </div>
+                  <fieldset>
                     <legend>Seeds</legend>
-                    <p class="hint">Seed 1 is the strongest. Top seeds meet as late as possible. Choose “Not playing” to leave a tribu out.</p>
+                    <p class="hint">Seed 1 is the strongest. Top seeds meet as late as possible. Choose “Not playing” to leave a tribu out. You can still swap tribus in the draw afterwards.</p>
                     <div class="seeds">
                       {teams.map((t, i) => (
                         <label class="seed">
@@ -459,7 +562,7 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
                     </div>
                   </fieldset>
                   <fieldset>
-                    <legend>Round-robin points</legend>
+                    <legend>Elims points</legend>
                     <div class="row three">
                       <Field name="win" label="Win" type="number" min={0} max={10} step="0.5" value="3" />
                       <Field name="draw" label="Draw" type="number" min={0} max={10} step="0.5" value="1" />
@@ -471,6 +574,50 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
               ) : (
                 <>
                   {groups.map((g) => (
+                    <>
+                      {draw.length > 0 && draw[0].stageId === g.stage.id && (
+                        <div class="draw" id="draw">
+                          <div class="draw-head">
+                            <h3>{hasElims ? 'Playoff draw' : 'Draw'}</h3>
+                            {hasElims && !drawLocked && (
+                              <form method="post">
+                                <input type="hidden" name="intent" value="send-to-playoffs" />
+                                <button class="btn btn-secondary btn-small" type="submit" data-confirm={draw.some((m) => m.homeTribuId !== null || m.awayTribuId !== null) ? 'Replace the playoff tribus with the top of the elims table?' : undefined}>
+                                  Send the top {draw.length * 2} on
+                                </button>
+                              </form>
+                            )}
+                          </div>
+                          <p class="hint" data-draw-status aria-live="polite">
+                            {drawLocked
+                              ? 'A match has a result, so the draw is fixed. Change tribus in each match below instead.'
+                              : 'Tap a tribu, then the one it should trade places with. On a computer you can also drag one onto the other.'}
+                          </p>
+                          <form method="post" data-draw>
+                            <input type="hidden" name="intent" value="swap" />
+                            <input type="hidden" name="from" value="" />
+                            <input type="hidden" name="to" value="" />
+                            <ol class="draw-matches">
+                              {draw.map((m) => (
+                                <li>
+                                  <span class="muted small">Match {m.position}</span>
+                                  {(['home', 'away'] as const).map((slot) => {
+                                    const id = slot === 'home' ? m.homeTribuId : m.awayTribuId;
+                                    const t = id === null ? undefined : byId.get(id);
+                                    const fixed = drawLocked || m.status === 'bye';
+                                    return (
+                                      <button class="slot" type="button" data-slot={`${m.id}:${slot}`} data-name={t?.name ?? 'To be decided'} draggable={fixed ? 'false' : 'true'} disabled={fixed} aria-pressed="false">
+                                        {t ? <TribuMark tribu={t} size="xs" /> : <span class="empty-mark" aria-hidden="true"></span>}
+                                        <span>{t?.name ?? (m.status === 'bye' ? 'Bye' : 'To be decided')}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </li>
+                              ))}
+                            </ol>
+                          </form>
+                        </div>
+                      )}
                     <div class="stage">
                       <h3>{g.stage.name}</h3>
                       {g.stage.kind === 'group' && (
@@ -543,6 +690,7 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
                         </div>
                       ))}
                     </div>
+                    </>
                   ))}
                   <form method="post">
                     <input type="hidden" name="intent" value="delete-competition" />
@@ -757,12 +905,87 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
   .match .hint {
     margin: 0;
   }
+  .draw {
+    margin-bottom: 24px;
+    scroll-margin-top: 16px;
+  }
+  .draw-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .draw-head h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+  .draw .hint {
+    margin: 6px 0 10px;
+  }
+  .draw-matches {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .draw-matches li {
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+  }
+  .slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: grab;
+  }
+  .slot:hover:not(:disabled) {
+    border-color: var(--ink);
+  }
+  .slot[aria-pressed="true"] {
+    border-color: var(--ink);
+    background: var(--sunrise);
+  }
+  .slot.over {
+    border-color: var(--ink);
+    border-style: dashed;
+  }
+  .slot:disabled {
+    color: var(--grey-600);
+    cursor: default;
+  }
+  .slot:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .empty-mark {
+    width: 20px;
+    height: 20px;
+    border: 1px dashed var(--grey-300);
+  }
   .add-cat {
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--grey-300);
   }
   @media (min-width: 768px) {
+    .draw-matches li {
+      grid-template-columns: 72px 1fr 1fr;
+      align-items: center;
+    }
     .seeds {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -772,3 +995,7 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
     }
   }
 </style>
+
+<script>
+  import '../../../../scripts/bracket-draw';
+</script>

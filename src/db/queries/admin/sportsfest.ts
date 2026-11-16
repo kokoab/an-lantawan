@@ -473,7 +473,12 @@ const STAGE_NAMES: Record<BracketStage, string> = {
  * Saves a generated bracket: its stages, its matches, then the links that send winners and
  * losers on. A single-elimination third-place match gets a stage of its own.
  */
-export async function createBracket(db: Db, categoryId: number, bracket: BracketMatch[]) {
+export async function createBracket(
+  db: Db,
+  categoryId: number,
+  bracket: BracketMatch[],
+  { firstSort = 0, playoffs = false } = {},
+) {
   const groupOf = (m: BracketMatch) => (m.key === 'P3' ? 'third' : m.stage);
   const order = ['single', 'upper', 'lower', 'final', 'third'];
   const used = order.filter((g) => bracket.some((m) => groupOf(m) === g));
@@ -484,8 +489,13 @@ export async function createBracket(db: Db, categoryId: number, bracket: Bracket
       .values({
         categoryId,
         kind: g === 'third' ? 'final' : (g as BracketStage),
-        name: g === 'third' ? 'Third place' : STAGE_NAMES[g as BracketStage],
-        sort,
+        name:
+          g === 'third'
+            ? 'Third place'
+            : playoffs && g === 'single'
+              ? 'Playoffs'
+              : STAGE_NAMES[g as BracketStage],
+        sort: firstSort + sort,
       })
       .returning({ id: stages.id });
     stageIds.set(g, row.id);
@@ -535,13 +545,14 @@ export async function createRoundRobin(
   tribuIds: number[],
   rounds: Array<Array<[number, number | null]>>,
   rule: { win: number; draw: number; loss: number },
+  name = 'Round robin',
 ) {
   const [stage] = await db
     .insert(stages)
     .values({
       categoryId,
       kind: 'group',
-      name: 'Round robin',
+      name,
       sort: 0,
       pointsWin: rule.win,
       pointsDraw: rule.draw,
@@ -611,6 +622,78 @@ export async function recordGroupResult(
       winnerTribuId: !done || home === away ? null : home > away ? m.homeTribuId : m.awayTribuId,
     })
     .where(eq(matches.id, id));
+}
+
+/** The first knockout round: where the draw is made and where tribus can be swapped. */
+export function firstRound(c: Competition) {
+  const upper = c.stages.find((s) => s.kind === 'upper');
+  const opening = upper ?? c.stages.find((s) => s.kind === 'single');
+  if (!opening) return [];
+  return c.matches.filter((m) => m.stageId === opening.id && m.round === 1);
+}
+
+/** Whether any playoff or knockout match has a result, after which the draw is fixed. */
+export const knockoutStarted = (c: Competition) => {
+  const knockout = new Set(c.stages.filter((s) => s.kind !== 'group').map((s) => s.id));
+  return c.matches.some((m) => knockout.has(m.stageId) && m.status === 'done');
+};
+
+/** Puts tribus into the first knockout round by position, as the draw says. */
+export async function setFirstRound(
+  db: Db,
+  c: Competition,
+  draw: Array<{ position: number; home: number | null; away: number | null }>,
+) {
+  const round = firstRound(c);
+  await runBatch(
+    db,
+    draw.flatMap((d) => {
+      const m = round.find((x) => x.position === d.position);
+      return m
+        ? [
+            db
+              .update(matches)
+              .set({ homeTribuId: d.home, awayTribuId: d.away })
+              .where(eq(matches.id, m.id)),
+          ]
+        : [];
+    }),
+  );
+}
+
+/** Trades the tribus in two slots of the first knockout round, in one batch. */
+export async function swapSlots(
+  db: Db,
+  a: { id: number; slot: 'home' | 'away'; tribuId: number | null },
+  b: { id: number; slot: 'home' | 'away'; tribuId: number | null },
+) {
+  const col = (slot: 'home' | 'away') => (slot === 'home' ? 'homeTribuId' : 'awayTribuId');
+  if (a.id === b.id) {
+    await db
+      .update(matches)
+      .set({ [col(a.slot)]: b.tribuId, [col(b.slot)]: a.tribuId })
+      .where(eq(matches.id, a.id));
+    return;
+  }
+  // Empty both first, so the "a tribu can't play itself" check never sees a half swap.
+  await runBatch(db, [
+    db
+      .update(matches)
+      .set({ [col(a.slot)]: null })
+      .where(eq(matches.id, a.id)),
+    db
+      .update(matches)
+      .set({ [col(b.slot)]: null })
+      .where(eq(matches.id, b.id)),
+    db
+      .update(matches)
+      .set({ [col(a.slot)]: b.tribuId })
+      .where(eq(matches.id, a.id)),
+    db
+      .update(matches)
+      .set({ [col(b.slot)]: a.tribuId })
+      .where(eq(matches.id, b.id)),
+  ]);
 }
 
 export async function deleteCompetition(db: Db, categoryId: number) {
