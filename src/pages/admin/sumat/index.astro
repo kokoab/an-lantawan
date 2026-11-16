@@ -190,7 +190,10 @@ const STATUS_TAG: Record<MessageStatus, { label: string; tone: string }> = {
       <input type="hidden" name="prompt" value={prompt?.text ?? ''} data-prompt-copy />
       <label class="switch">
         <input type="checkbox" name="on" checked={prompt !== null} data-autosubmit-check />
-        <span class="switch-text"><strong>Sumat is {prompt ? 'open' : 'closed'}</strong></span>
+        <span class="switch-text">
+          <strong>Sumat is {prompt ? 'open' : 'closed'}</strong>
+          <span>{prompt ? 'Shown in the header, menu and home page.' : 'Hidden from the site. Its link says Sumat is closed.'}</span>
+        </span>
       </label>
     </form>
   </section>
