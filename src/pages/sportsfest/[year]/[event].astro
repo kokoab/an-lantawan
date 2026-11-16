@@ -70,7 +70,7 @@ const medalCards = MEDALS.flatMap((m) =>
     .filter((r) => r.place === m.place)
     .flatMap((r) => {
       const tribu = tribus.get(r.tribuId);
-      return tribu ? [{ ...m, tribu, mark: r.mark }] : [];
+      return tribu ? [{ ...m, tribu, mark: r.mark, count: r.count }] : [];
     }),
 );
 
@@ -143,6 +143,7 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
             <div class="medal-tribu">
               <TribuMark tribu={m.tribu} size="md" />
               <strong>{m.tribu.name}</strong>
+              {m.count > 1 && <span class="times">×{m.count}</span>}
             </div>
             {m.mark && <p class="mark">{m.mark}</p>}
           </div>
@@ -222,7 +223,7 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
   }
 
   {
-    stages.length === 0 && results.length > 0 && (
+    stages.length === 0 && results.length > 0 && !category?.customMedals && (
       <section class="band framed block" aria-labelledby="results-title">
         <h2 id="results-title">Results</h2>
         <table class="table results">
@@ -341,6 +342,10 @@ const hasResults = medalCards.length > 0 || knockouts.length > 0 || groups.lengt
   .medal .mark {
     font-size: 14px;
     font-weight: 500;
+  }
+  .times {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
   .medal-tribu {
     display: flex;

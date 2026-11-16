@@ -80,3 +80,61 @@ export function readFinishes(
 }
 
 export const isMedal = (place: number): place is Medal => place >= 1 && place <= 3;
+
+export const MAX_MEDALS_EACH = 99;
+
+/** One tribu's medals in a category with custom medals. */
+export interface MedalCount {
+  tribuId: number;
+  place: Medal;
+  count: number;
+}
+
+/**
+ * Reads the custom medals form: how many golds, silvers and bronzes each tribu won.
+ * Blank means none. Returns one row per medal a tribu actually has.
+ */
+export function readMedalCounts(
+  entries: Array<{ tribuId: number; gold: string; silver: string; bronze: string }>,
+): { ok: true; counts: MedalCount[] } | { ok: false; error: string } {
+  const counts: MedalCount[] = [];
+  for (const e of entries) {
+    for (const [place, raw] of [
+      [1, e.gold],
+      [2, e.silver],
+      [3, e.bronze],
+    ] as const) {
+      const text = raw.trim();
+      if (!text) continue;
+      const n = Number(text);
+      if (!Number.isInteger(n) || n < 0 || n > MAX_MEDALS_EACH) {
+        return { ok: false, error: `Medal counts are whole numbers from 0 to ${MAX_MEDALS_EACH}.` };
+      }
+      if (n > 0) counts.push({ tribuId: e.tribuId, place, count: n });
+    }
+  }
+  return { ok: true, counts };
+}
+
+/** Turning custom medals on: each medal place becomes a count of one. Places 4+ go. */
+export const finishesToCounts = (finishes: readonly Finish[]): MedalCount[] =>
+  finishes.flatMap((f) =>
+    isMedal(f.place) ? [{ tribuId: f.tribuId, place: f.place, count: 1 }] : [],
+  );
+
+/**
+ * Turning custom medals off: each tribu keeps its best medal, as a single place. Extra
+ * medals are dropped, which the admin warns about before switching.
+ */
+export function countsToFinishes(counts: readonly MedalCount[]): Finish[] {
+  const best = new Map<number, number>();
+  for (const c of counts) {
+    const prev = best.get(c.tribuId);
+    if (prev === undefined || c.place < prev) best.set(c.tribuId, c.place);
+  }
+  return [...best].map(([tribuId, place]) => ({ tribuId, place }));
+}
+
+/** Whether switching custom medals off would lose any medal. */
+export const countsLoseMedals = (counts: readonly MedalCount[]) =>
+  counts.reduce((n, c) => n + c.count, 0) > countsToFinishes(counts).length;

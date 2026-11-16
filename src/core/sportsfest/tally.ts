@@ -3,6 +3,8 @@ export type Medal = 1 | 2 | 3;
 export interface Placement {
   tribuId: number;
   place: Medal;
+  /** Medals of this place, when a category gives a tribu several (swimming). Default 1. */
+  count?: number;
 }
 
 export interface TallyRow {
@@ -37,12 +39,12 @@ export function medalTally(
   };
 
   for (const id of tribuIds) row(id);
-  for (const { tribuId, place } of placements) {
+  for (const { tribuId, place, count = 1 } of placements) {
     const r = row(tribuId);
-    if (place === 1) r.gold++;
-    else if (place === 2) r.silver++;
-    else r.bronze++;
-    r.total++;
+    if (place === 1) r.gold += count;
+    else if (place === 2) r.silver += count;
+    else r.bronze += count;
+    r.total += count;
   }
 
   const sorted = [...rows.values()].sort(

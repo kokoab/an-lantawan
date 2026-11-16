@@ -9,7 +9,16 @@ import {
   singleElimination,
 } from '../../../../core/sportsfest/bracket';
 import { formatScore, pointsRuleText } from '../../../../core/sportsfest/display';
-import { bracketMedals, readFinishes, standingsFinishes } from '../../../../core/sportsfest/medals';
+import {
+  bracketMedals,
+  countsLoseMedals,
+  countsToFinishes,
+  finishesToCounts,
+  type MedalCount,
+  readFinishes,
+  readMedalCounts,
+  standingsFinishes,
+} from '../../../../core/sportsfest/medals';
 import { roundRobinRounds, standings } from '../../../../core/sportsfest/standings';
 import { db } from '../../../../db/client';
 import {
@@ -30,6 +39,8 @@ import {
   recordGroupResult,
   renameCategory,
   saveFinishes,
+  saveMedalCounts,
+  setCustomMedals,
   toBracket,
   updateEvent,
   updateMatchDetails,
@@ -99,6 +110,8 @@ if (Astro.request.method === 'POST') {
     await deleteCategory(db, event.id, category.id);
     await log(`Removed the ${category.name} category from ${event.name}`);
     return doneRedirect(Astro, base, 'deleted');
+  } else if (category && intent === 'results' && category.customMedals) {
+    problem = 'This category uses custom medals. Reload the page to see them.';
   } else if (category && intent === 'results') {
     const r = readFinishes(
       teams.map((t) => ({
@@ -114,6 +127,33 @@ if (Astro.request.method === 'POST') {
       await log(`Saved results of ${event.name}, ${category.name}`);
       return doneRedirect(Astro, here, 'result');
     }
+  } else if (category && intent === 'medal-counts') {
+    const r = readMedalCounts(
+      teams.map((t) => ({
+        tribuId: t.id,
+        gold: one(form, `gold_${t.id}`),
+        silver: one(form, `silver_${t.id}`),
+        bronze: one(form, `bronze_${t.id}`),
+      })),
+    );
+    if (!category.customMedals) problem = 'Turn on Customize medals first.';
+    else if (!r.ok) problem = r.error;
+    else {
+      await saveMedalCounts(db, category.id, r.counts);
+      await log(`Saved medals of ${event.name}, ${category.name}`);
+      return doneRedirect(Astro, here, 'result');
+    }
+  } else if (category && intent === 'custom-medals') {
+    const on = !category.customMedals;
+    const current = await listFinishes(db, category.id);
+    const rows = on
+      ? finishesToCounts(current)
+      : countsToFinishes(current as MedalCount[]).map((f) => ({ ...f, count: 1 }));
+    await setCustomMedals(db, category.id, on, rows);
+    await log(
+      `${on ? 'Turned on' : 'Turned off'} custom medals for ${event.name}, ${category.name}`,
+    );
+    return doneRedirect(Astro, here, 'saved');
   } else if (category && intent === 'fill-results') {
     const comp = await getCompetition(db, category.id);
     const group = comp.stages.find((s) => s.kind === 'group');
@@ -149,7 +189,9 @@ if (Astro.request.method === 'POST') {
             ),
           )
         : bracketMedals(toBracket(comp));
-    if (!finishes)
+    if (category.customMedals)
+      problem = 'Turn off Customize medals to fill in places from the matches.';
+    else if (!finishes)
       problem = 'Some matches haven’t been played yet, so the places can’t be filled in.';
     else {
       await saveFinishes(db, category.id, finishes);
@@ -249,6 +291,10 @@ const [finishes, comp] = category
   ? await Promise.all([listFinishes(db, category.id), getCompetition(db, category.id)])
   : [[], null];
 const placeOf = new Map(finishes.map((f) => [f.tribuId, f]));
+const countOf = (tribuId: number, place: number) =>
+  finishes.find((f) => f.tribuId === tribuId && f.place === place)?.count ?? 0;
+const custom = category?.customMedals ?? false;
+const losesMedals = custom && countsLoseMedals(finishes as MedalCount[]);
 const ev = (k: string) => (eventValues[k] ?? '') as string;
 const TYPES = [
   { value: 'bracket', label: 'Matches between tribus' },
@@ -302,47 +348,87 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
       {
         category && (
           <>
-            <form class="panel" method="post">
+            <section class="panel">
               <div class="panel-head">
                 <h2>Results: {category.name}</h2>
-                <span class="muted small">Places 1 to 3 are the medals. Ties can share a place. Results are optional, like 12.84 seconds.</span>
-              </div>
-              <input type="hidden" name="intent" value="results" />
-              <div class="table-wrap">
-                <table class="table">
-                  <thead><tr><th scope="col">Tribu</th><th scope="col">Place</th><th scope="col">Time, distance or score</th></tr></thead>
-                  <tbody>
-                    {teams.map((t) => {
-                      const f = placeOf.get(t.id);
-                      return (
-                        <tr>
-                          <th scope="row"><span class="tribu"><TribuMark tribu={t} size="xs" />{t.name}</span></th>
-                          <td class="place">
-                            <select name={`place_${t.id}`} aria-label={`Place of ${t.name}`}>
-                              <option value="">No place</option>
-                              {teams.map((_, i) => (
-                                <option value={i + 1} selected={f?.place === i + 1}>
-                                  {i + 1}{i < 3 ? ` (${medalLabel(i + 1)})` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td><input type="text" name={`mark_${t.id}`} value={f?.mark ?? ''} maxlength="60" aria-label={`Result of ${t.name}`} /></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div class="form-actions">
-                <button class="btn btn-primary" type="submit">Save results</button>
-                {comp && comp.stages.length > 0 && (
-                  <button class="btn btn-secondary" type="submit" name="intent" value="fill-results" data-confirm="Replace the places above with the ones the matches decided?">
-                    Fill in from the matches
+                <form method="post">
+                  <input type="hidden" name="intent" value="custom-medals" />
+                  <button
+                    class="switch-button"
+                    type="submit"
+                    role="switch"
+                    aria-checked={custom ? 'true' : 'false'}
+                    data-confirm={losesMedals ? 'Go back to one place per tribu? Each tribu keeps only its best medal here.' : undefined}
+                  >
+                    <span class="track" aria-hidden="true"></span>
+                    Customize medals
                   </button>
-                )}
+                </form>
               </div>
-            </form>
+              {custom ? (
+                <form method="post">
+                  <p class="muted small">Enter how many golds, silvers and bronzes each tribu won here, like 1 gold and 2 silvers in swimming. Leave a box empty for none.</p>
+                  <input type="hidden" name="intent" value="medal-counts" />
+                  <div class="table-wrap">
+                    <table class="table">
+                      <thead><tr><th scope="col">Tribu</th><th scope="col">Gold</th><th scope="col">Silver</th><th scope="col">Bronze</th></tr></thead>
+                      <tbody>
+                        {teams.map((t) => (
+                          <tr>
+                            <th scope="row"><span class="tribu"><TribuMark tribu={t} size="xs" />{t.name}</span></th>
+                            {(['gold', 'silver', 'bronze'] as const).map((medal, i) => (
+                              <td class="count">
+                                <input type="number" name={`${medal}_${t.id}`} min="0" max="99" step="1" inputmode="numeric" value={countOf(t.id, i + 1) || ''} aria-label={`${medal[0].toUpperCase()}${medal.slice(1)} medals of ${t.name}`} />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="form-actions"><button class="btn btn-primary" type="submit">Save medals</button></div>
+                </form>
+              ) : (
+                <form method="post">
+                  <p class="muted small">Places 1 to 3 are the medals. Ties can share a place. Results are optional, like 12.84 seconds.</p>
+                  <input type="hidden" name="intent" value="results" />
+                  <div class="table-wrap">
+                    <table class="table">
+                      <thead><tr><th scope="col">Tribu</th><th scope="col">Place</th><th scope="col">Time, distance or score</th></tr></thead>
+                      <tbody>
+                        {teams.map((t) => {
+                          const f = placeOf.get(t.id);
+                          return (
+                            <tr>
+                              <th scope="row"><span class="tribu"><TribuMark tribu={t} size="xs" />{t.name}</span></th>
+                              <td class="place">
+                                <select name={`place_${t.id}`} aria-label={`Place of ${t.name}`}>
+                                  <option value="">No place</option>
+                                  {teams.map((_, i) => (
+                                    <option value={i + 1} selected={f?.place === i + 1}>
+                                      {i + 1}{i < 3 ? ` (${medalLabel(i + 1)})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td><input type="text" name={`mark_${t.id}`} value={f?.mark ?? ''} maxlength="60" aria-label={`Result of ${t.name}`} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="form-actions">
+                    <button class="btn btn-primary" type="submit">Save results</button>
+                    {comp && comp.stages.length > 0 && (
+                      <button class="btn btn-secondary" type="submit" name="intent" value="fill-results" data-confirm="Replace the places above with the ones the matches decided?">
+                        Fill in from the matches
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+            </section>
 
             <section class="panel">
               <h2>Matches</h2>
@@ -538,6 +624,58 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
   }
   .place {
     width: 160px;
+  }
+  .count {
+    width: 96px;
+  }
+  .count input {
+    width: 80px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Looks like the yellow switch elsewhere in the admin, but is a button so it can confirm. */
+  .switch-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .switch-button .track {
+    position: relative;
+    flex: none;
+    width: 44px;
+    height: 24px;
+    border: 1px solid var(--grey-300);
+    background: var(--grey-300);
+  }
+  .switch-button .track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: var(--white);
+  }
+  .switch-button[aria-checked="true"] .track {
+    border-color: var(--ink);
+    background: var(--sunrise);
+  }
+  .switch-button[aria-checked="true"] .track::after {
+    left: 22px;
+    background: var(--ink);
+  }
+  .switch-button:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
   }
   .seeds {
     display: grid;

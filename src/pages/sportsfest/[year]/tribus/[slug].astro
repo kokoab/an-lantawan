@@ -28,7 +28,7 @@ const medals = rows
   .flatMap((r) =>
     ([1, 2, 3] as const)
       .filter((p) => r.medals[p].includes(tribu.id))
-      .map((place) => ({ row: r, place })),
+      .map((place) => ({ row: r, place, count: r.counts[place][tribu.id] ?? 1 })),
   )
   .sort((a, b) => a.place - b.place || a.row.event.name.localeCompare(b.row.event.name));
 const showAll = Astro.url.searchParams.get('medals') === 'all';
@@ -135,6 +135,7 @@ const games = [
                   <td class="muted">{m.row.category}</td>
                   <td>
                     <span class:list={['medal', MEDAL_NAMES[m.place].toLowerCase()]}>{MEDAL_NAMES[m.place]}</span>
+                    {m.count > 1 && <span class="times">×{m.count}</span>}
                   </td>
                 </tr>
               ))}
@@ -319,6 +320,10 @@ const games = [
   .table a:hover {
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+  .times {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
   .medal {
     display: inline-block;

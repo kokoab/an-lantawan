@@ -66,6 +66,7 @@ async function listPlacements(db: Db, sportsfestId: number) {
       tribuId: placements.tribuId,
       place: placements.place,
       mark: placements.mark,
+      count: placements.count,
       categoryId: categories.id,
     })
     .from(placements)
@@ -85,7 +86,7 @@ export async function getTally(db: Db, sf: Sportsfest) {
   const medals = await listPlacements(db, sf.id);
   const rows = medalTally(
     sf.tribus.map((t) => t.id),
-    medals.map((m) => ({ tribuId: m.tribuId, place: m.place as Medal })),
+    medals.map((m) => ({ tribuId: m.tribuId, place: m.place as Medal, count: m.count })),
   );
   const byId = new Map(sf.tribus.map((t) => [t.id, t]));
   return rows.flatMap((r) => {
@@ -108,6 +109,8 @@ export interface EventRow {
   category: string;
   /** Tribu IDs by place. Ties put two tribus on one place. */
   medals: Record<Medal, number[]>;
+  /** How many medals of each place a tribu won; above 1 only with custom medals. */
+  counts: Record<Medal, Record<number, number>>;
 }
 
 /** Every medal event of a Sportsfest, in event name and category order. */
@@ -137,7 +140,13 @@ export async function listEventRows(db: Db, sportsfestId: number): Promise<Event
   return rows.map((r) => {
     const here = medals.filter((m) => m.categoryId === r.categoryId);
     const at = (p: Medal) => here.filter((m) => m.place === p).map((m) => m.tribuId);
-    return { ...r, medals: { 1: at(1), 2: at(2), 3: at(3) } };
+    const count = (p: Medal) =>
+      Object.fromEntries(here.filter((m) => m.place === p).map((m) => [m.tribuId, m.count]));
+    return {
+      ...r,
+      medals: { 1: at(1), 2: at(2), 3: at(3) },
+      counts: { 1: count(1), 2: count(2), 3: count(3) },
+    };
   });
 }
 
@@ -150,7 +159,7 @@ export async function getEvent(db: Db, sportsfestId: number, slug: string, categ
     .limit(1);
   if (!event) return null;
   const cats = await db
-    .select({ id: categories.id, name: categories.name })
+    .select({ id: categories.id, name: categories.name, customMedals: categories.customMedals })
     .from(categories)
     .where(eq(categories.eventId, event.id))
     .orderBy(categories.sort, categories.name);
@@ -159,7 +168,12 @@ export async function getEvent(db: Db, sportsfestId: number, slug: string, categ
 
   const [results, stageRows] = await Promise.all([
     db
-      .select({ tribuId: placements.tribuId, place: placements.place, mark: placements.mark })
+      .select({
+        tribuId: placements.tribuId,
+        place: placements.place,
+        mark: placements.mark,
+        count: placements.count,
+      })
       .from(placements)
       .where(eq(placements.categoryId, category.id))
       .orderBy(placements.place),

@@ -50,7 +50,12 @@ const view = rows.map((r) => {
     pill: showWhen ? null : pill,
     when: when(start, state !== 'final'),
     note,
-    places: ([1, 2, 3] as const).map((p) => r.medals[p].flatMap((id) => byId.get(id) ?? [])),
+    places: ([1, 2, 3] as const).map((p) =>
+      r.medals[p].flatMap((id) => {
+        const tribu = byId.get(id);
+        return tribu ? [{ tribu, count: r.counts[p][id] ?? 1 }] : [];
+      }),
+    ),
   };
 });
 ---
@@ -84,7 +89,12 @@ const view = rows.map((r) => {
               <td class="medal">
                 <span class="visually-hidden">{['Gold', 'Silver', 'Bronze'][i]}: </span>
                 {tribusHere.length ? (
-                  tribusHere.map((t) => <TribuChip tribu={t} year={year} />)
+                  tribusHere.map((m) => (
+                    <span class="won">
+                      <TribuChip tribu={m.tribu} year={year} />
+                      {m.count > 1 && <span class="times">×{m.count}</span>}
+                    </span>
+                  ))
                 ) : (
                   <span class="none">None</span>
                 )}
@@ -161,6 +171,15 @@ const view = rows.map((r) => {
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+  .won {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .times {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
   .note,
   .none {

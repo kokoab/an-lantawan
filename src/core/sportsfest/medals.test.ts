@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { type BracketMatch, doubleElimination, recordResult, singleElimination } from './bracket';
-import { bracketMedals, readFinishes, standingsFinishes } from './medals';
+import {
+  bracketMedals,
+  countsLoseMedals,
+  countsToFinishes,
+  finishesToCounts,
+  readFinishes,
+  readMedalCounts,
+  standingsFinishes,
+} from './medals';
 import { standings } from './standings';
 
 const play = (bracket: BracketMatch[], results: Record<string, [number, number]>) => {
@@ -129,5 +137,82 @@ describe('readFinishes', () => {
       error: 'Places go from 1 to 4.',
     });
     expect(readFinishes([{ tribuId: 1, place: '', mark: '12.1' }], 4).ok).toBe(false);
+  });
+});
+
+describe('readMedalCounts', () => {
+  const entry = (tribuId: number, gold = '', silver = '', bronze = '') => ({
+    tribuId,
+    gold,
+    silver,
+    bronze,
+  });
+
+  it('reads counts per tribu, skipping blanks and zeros', () => {
+    expect(readMedalCounts([entry(1, '1', '2', ''), entry(2, '0', '', '3'), entry(3)])).toEqual({
+      ok: true,
+      counts: [
+        { tribuId: 1, place: 1, count: 1 },
+        { tribuId: 1, place: 2, count: 2 },
+        { tribuId: 2, place: 3, count: 3 },
+      ],
+    });
+  });
+
+  it('accepts spaces around numbers', () => {
+    const r = readMedalCounts([entry(1, ' 4 ')]);
+    expect(r.ok && r.counts).toEqual([{ tribuId: 1, place: 1, count: 4 }]);
+  });
+
+  it('refuses halves, negatives, words and huge numbers', () => {
+    for (const bad of ['1.5', '-1', 'two', '100', '1e1x']) {
+      expect(readMedalCounts([entry(1, bad)]).ok).toBe(false);
+    }
+  });
+
+  it('allows a category where nobody has medals yet', () => {
+    expect(readMedalCounts([entry(1), entry(2)])).toEqual({ ok: true, counts: [] });
+  });
+});
+
+describe('switching custom medals', () => {
+  it('turns places 1 to 3 into one medal each and drops later places', () => {
+    expect(
+      finishesToCounts([
+        { tribuId: 1, place: 1 },
+        { tribuId: 2, place: 3 },
+        { tribuId: 3, place: 3 },
+        { tribuId: 4, place: 4 },
+      ]),
+    ).toEqual([
+      { tribuId: 1, place: 1, count: 1 },
+      { tribuId: 2, place: 3, count: 1 },
+      { tribuId: 3, place: 3, count: 1 },
+    ]);
+  });
+
+  it('keeps each tribu’s best medal when switching back', () => {
+    const counts = [
+      { tribuId: 1, place: 2 as const, count: 2 },
+      { tribuId: 1, place: 1 as const, count: 1 },
+      { tribuId: 2, place: 3 as const, count: 1 },
+    ];
+    expect(countsToFinishes(counts)).toEqual([
+      { tribuId: 1, place: 1 },
+      { tribuId: 2, place: 3 },
+    ]);
+    expect(countsLoseMedals(counts)).toBe(true);
+  });
+
+  it('says nothing is lost when every tribu has at most one medal', () => {
+    const counts = finishesToCounts([
+      { tribuId: 1, place: 1 },
+      { tribuId: 2, place: 2 },
+    ]);
+    expect(countsLoseMedals(counts)).toBe(false);
+    expect(countsToFinishes(counts)).toEqual([
+      { tribuId: 1, place: 1 },
+      { tribuId: 2, place: 2 },
+    ]);
   });
 });

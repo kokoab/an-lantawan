@@ -54,3 +54,38 @@ describe('medalTally', () => {
     expect(medalTally(ids, [])).toHaveLength(6);
   });
 });
+
+describe('medalTally with custom medal counts', () => {
+  it('adds counts, so one swimming category can give a tribu several medals', () => {
+    const rows = medalTally(
+      [1, 2, 3],
+      [
+        { tribuId: 1, place: 1, count: 1 },
+        { tribuId: 1, place: 2, count: 2 },
+        { tribuId: 2, place: 1, count: 3 },
+        { tribuId: 3, place: 3, count: 1 },
+      ],
+    );
+    expect(rows.map((r) => [r.tribuId, r.gold, r.silver, r.bronze, r.total, r.rank])).toEqual([
+      [2, 3, 0, 0, 3, 1],
+      [1, 1, 2, 0, 3, 2],
+      [3, 0, 0, 1, 1, 3],
+    ]);
+  });
+
+  it('treats a missing count as one medal, like before', () => {
+    const [top] = medalTally([1], [{ tribuId: 1, place: 1 }]);
+    expect(top.gold).toBe(1);
+  });
+
+  it('ranks tribus with the same counts together', () => {
+    const rows = medalTally(
+      [1, 2],
+      [
+        { tribuId: 1, place: 1, count: 2 },
+        { tribuId: 2, place: 1, count: 2 },
+      ],
+    );
+    expect(rows.map((r) => r.rank)).toEqual([1, 1]);
+  });
+});

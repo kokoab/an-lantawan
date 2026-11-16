@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNull, like, sql } from 'drizzle-orm';
 import { slugify } from '../../../core/slug';
 import type { BracketMatch, BracketStage } from '../../../core/sportsfest/bracket';
-import type { Finish } from '../../../core/sportsfest/medals';
+import type { Finish, MedalCount } from '../../../core/sportsfest/medals';
 import { type Query, runBatch } from '../../batch';
 import type { Db } from '../../client';
 import {
@@ -306,6 +306,39 @@ export async function saveFinishes(
       db
         .insert(placements)
         .values({ categoryId, tribuId: f.tribuId, place: f.place, mark: f.mark ?? null }),
+    ),
+  ]);
+}
+
+/** Replaces a category's medals with custom counts (1 gold and 2 silvers, say). */
+export async function saveMedalCounts(db: Db, categoryId: number, counts: MedalCount[]) {
+  await runBatch(db, [
+    db.delete(placements).where(eq(placements.categoryId, categoryId)),
+    ...counts.map((c) =>
+      db
+        .insert(placements)
+        .values({ categoryId, tribuId: c.tribuId, place: c.place, count: c.count }),
+    ),
+  ]);
+}
+
+/**
+ * Switches a category between one place per tribu and custom medal counts, converting
+ * what is already entered in the same batch so the tally never sees half of it.
+ */
+export async function setCustomMedals(
+  db: Db,
+  categoryId: number,
+  on: boolean,
+  rows: Array<{ tribuId: number; place: number; count: number }>,
+) {
+  await runBatch(db, [
+    db.update(categories).set({ customMedals: on }).where(eq(categories.id, categoryId)),
+    db.delete(placements).where(eq(placements.categoryId, categoryId)),
+    ...rows.map((r) =>
+      db
+        .insert(placements)
+        .values({ categoryId, tribuId: r.tribuId, place: r.place, count: r.count }),
     ),
   ]);
 }

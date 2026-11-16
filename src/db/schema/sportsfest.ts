@@ -86,12 +86,18 @@ export const categories = sqliteTable('categories', {
     .references(() => events.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   sort: integer('sort').notNull().default(0),
+  /**
+   * Off: each tribu gets one place. On: editors enter how many golds, silvers and bronzes
+   * each tribu won, for events like swimming where one tribu can take several.
+   */
+  customMedals: integer('custom_medals', { mode: 'boolean' }).notNull().default(false),
 });
 
 /**
  * Where each tribu finished in a category. Places 1 to 3 are the medals; later places are
- * kept for the full results. Place is not unique, so ties (two bronzes) are allowed, but a
- * tribu finishes only once per category.
+ * kept for the full results. Place is not unique, so ties (two bronzes) are allowed. A
+ * tribu has one row per place: normally a single row, but a category with custom medals
+ * can give it, say, 1 gold and 2 silvers (two rows, the silver one with a count of 2).
  */
 export const placements = sqliteTable(
   'placements',
@@ -106,10 +112,13 @@ export const placements = sqliteTable(
     place: integer('place').notNull(),
     /** Time, distance or score shown beside the place, e.g. "12.41 seconds". */
     mark: text('mark'),
+    /** How many medals of this place the tribu won. Always 1 unless medals are custom. */
+    count: integer('count').notNull().default(1),
   },
   (t) => [
-    uniqueIndex('placements_tribu').on(t.categoryId, t.tribuId),
+    uniqueIndex('placements_tribu_place').on(t.categoryId, t.tribuId, t.place),
     check('placements_place', sql`${t.place} >= 1`),
+    check('placements_count', sql`${t.count} >= 1`),
   ],
 );
 

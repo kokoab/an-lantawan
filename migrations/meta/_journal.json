@@ -99,6 +99,13 @@
       "when": 1793683863763,
       "tag": "0013_issue_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1794789537404,
+      "tag": "0014_custom_medals",
+      "breakpoints": true
     }
   ]
 }
