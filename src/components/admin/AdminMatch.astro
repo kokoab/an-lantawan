@@ -1,0 +1,304 @@
+---
+/**
+ * One match on an event's admin page, inside a form that saves a whole round or stage.
+ * Shows the two tribus and their scores; time, venue, status, changing tribus and deleting
+ * sit behind Edit. Fields end in the match ID (homeScore_12) so one form holds many.
+ * In a bracket's first round, the tribu names double as the draw's swap buttons.
+ */
+import { toDateTimeInput } from '../../core/forms';
+import { formatScore } from '../../core/sportsfest/display';
+import TribuMark from '../sportsfest/TribuMark.astro';
+
+interface Tribu {
+  id: number;
+  name: string;
+  color: string;
+  logoKey: string | null;
+}
+interface Props {
+  match: {
+    id: number;
+    homeTribuId: number | null;
+    awayTribuId: number | null;
+    homeScore: number | null;
+    awayScore: number | null;
+    winnerTribuId: number | null;
+    status: string;
+    startsAt: Date | null;
+    venue: string | null;
+  };
+  teams: Tribu[];
+  byId: Map<number, Tribu>;
+  /** "line" for elims rounds, "card" for a bracket. */
+  layout?: 'line' | 'card';
+  label?: string;
+  /** Elims matches can be deleted one by one; bracket matches can't. */
+  deletable?: boolean;
+  /** The draw form this match's tribus can be swapped in, while the draw is open. */
+  drawForm?: string | null;
+}
+
+const {
+  match: m,
+  teams,
+  byId,
+  layout = 'line',
+  label,
+  deletable = false,
+  drawForm = null,
+} = Astro.props;
+const decided = m.status === 'done' || m.status === 'bye';
+const STATUSES = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'ongoing', label: 'Live' },
+  { value: 'postponed', label: 'Postponed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const STATE: Record<string, { text: string; className: string }> = {
+  done: { text: 'Final', className: 'ink' },
+  bye: { text: 'Bye', className: '' },
+  ongoing: { text: 'Live', className: 'sun' },
+  postponed: { text: 'Postponed', className: '' },
+  cancelled: { text: 'Cancelled', className: '' },
+};
+const sides = [
+  { slot: 'home' as const, id: m.homeTribuId, score: m.homeScore },
+  { slot: 'away' as const, id: m.awayTribuId, score: m.awayScore },
+];
+const nameOf = (id: number | null) => (id === null ? null : (byId.get(id) ?? null));
+const swappable = drawForm !== null && m.status !== 'bye';
+---
+
+<div class:list={['match', layout, { decided }]} id={`match-${m.id}`}>
+  <input type="hidden" name="ids" value={m.id} />
+  {label && <p class="label">{label}</p>}
+  <div class="sides">
+    {
+      sides.map((s, i) => {
+        const t = nameOf(s.id);
+        const won = m.winnerTribuId !== null && m.winnerTribuId === s.id;
+        const name = t?.name ?? 'To be decided';
+        return (
+          <>
+            {i === 1 && layout === 'line' && <span class="dash" aria-hidden="true">–</span>}
+            <div class:list={['side', s.slot, { won, empty: !t }]}>
+              {swappable ? (
+                <button class="team slot" type="button" data-draw-slot={drawForm} data-slot={`${m.id}:${s.slot}`} data-name={name} draggable="true" aria-pressed="false">
+                  {t ? <TribuMark tribu={t} size="xs" /> : <span class="empty-mark" aria-hidden="true" />}
+                  <span>{name}</span>
+                </button>
+              ) : (
+                <span class="team">
+                  {t ? <TribuMark tribu={t} size="xs" /> : <span class="empty-mark" aria-hidden="true" />}
+                  <span>{name}</span>
+                </span>
+              )}
+              <input class="score" type="text" inputmode="decimal" name={`${s.slot}Score_${m.id}`} value={formatScore(s.score)} aria-label={`Score of ${name}`} disabled={!t || m.status === 'bye'} />
+            </div>
+          </>
+        );
+      })
+    }
+    {STATE[m.status] && <span class:list={['badge', 'state', STATE[m.status].className]}>{STATE[m.status].text}</span>}
+  </div>
+  <details class="more">
+    <summary>Edit</summary>
+    <div class="more-fields">
+      {
+        decided ? (
+          <>
+            <input type="hidden" name={`homeTribuId_${m.id}`} value={m.homeTribuId ?? ''} />
+            <input type="hidden" name={`awayTribuId_${m.id}`} value={m.awayTribuId ?? ''} />
+            <input type="hidden" name={`status_${m.id}`} value={m.status} />
+          </>
+        ) : (
+          <>
+            {sides.map((s) => (
+              <label>
+                <span>{s.slot === 'home' ? 'First tribu' : 'Second tribu'}</span>
+                <select name={`${s.slot}TribuId_${m.id}`}>
+                  <option value="">To be decided</option>
+                  {teams.map((t) => <option value={t.id} selected={t.id === s.id}>{t.name}</option>)}
+                </select>
+              </label>
+            ))}
+            <label>
+              <span>Status</span>
+              <select name={`status_${m.id}`}>
+                {STATUSES.map((s) => <option value={s.value} selected={s.value === m.status}>{s.label}</option>)}
+              </select>
+            </label>
+          </>
+        )
+      }
+      <label>
+        <span>Starts</span>
+        <input type="datetime-local" name={`startsAt_${m.id}`} value={toDateTimeInput(m.startsAt)} />
+      </label>
+      <label>
+        <span>Venue</span>
+        <input type="text" name={`venue_${m.id}`} value={m.venue ?? ''} maxlength="120" placeholder="Gymnasium" />
+      </label>
+      {decided && m.status === 'done' && <p class="hint">To undo the result, clear both scores and save.</p>}
+      {
+        deletable && (
+          <button class="btn btn-danger btn-small" type="submit" name="deleteMatch" value={m.id} formnovalidate data-confirm="Delete this match? Its score goes too, and the standings change.">
+            Delete match
+          </button>
+        )
+      }
+    </div>
+  </details>
+</div>
+
+<style>
+  .match {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+    scroll-margin-top: 16px;
+  }
+  .match.decided {
+    background: var(--grey-50);
+  }
+  .match:target {
+    border-color: var(--ink);
+  }
+  .label {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--grey-600);
+  }
+  .sides {
+    display: grid;
+    gap: 6px;
+    align-items: center;
+  }
+  .side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 64px;
+    gap: 8px;
+    align-items: center;
+  }
+  .team {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 36px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .decided .side:not(.won) .team {
+    color: var(--grey-600);
+    font-weight: 400;
+  }
+  .side.won .team {
+    font-weight: 700;
+  }
+  .side.empty .team {
+    color: var(--grey-600);
+  }
+  button.team {
+    padding: 0 8px;
+    border: 1px solid var(--grey-300);
+    background: var(--white);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: grab;
+  }
+  button.team:hover {
+    border-color: var(--ink);
+  }
+  button.team[aria-pressed="true"] {
+    border-color: var(--ink);
+    background: var(--sunrise);
+  }
+  button.team.over {
+    border-style: dashed;
+    border-color: var(--ink);
+  }
+  button.team:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  .empty-mark {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border: 1px dashed var(--grey-300);
+  }
+  .score {
+    width: 64px;
+    min-height: 36px;
+    padding: 4px 8px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .dash {
+    display: none;
+  }
+  .state {
+    justify-self: start;
+  }
+  .more summary {
+    width: max-content;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--grey-600);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .more-fields {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .more-fields label {
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .more-fields .btn {
+    justify-self: start;
+  }
+  .more-fields .hint {
+    margin: 0;
+  }
+  @media (min-width: 768px) {
+    /* An elims match on one line: Dayea [2] – [0] Mapulon  Final */
+    .line .sides {
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 88px;
+    }
+    .line .dash {
+      display: block;
+      color: var(--grey-600);
+    }
+    .line .side.away {
+      grid-template-columns: 64px minmax(0, 1fr);
+    }
+    .line .side.away .score {
+      order: -1;
+    }
+    .line .side.away .team {
+      justify-content: flex-end;
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+    .line .state {
+      justify-self: end;
+    }
+    .more-fields {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: end;
+    }
+  }
+</style>

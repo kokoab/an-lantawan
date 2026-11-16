@@ -705,6 +705,37 @@ export async function swapSlots(
   ]);
 }
 
+/** Removes one elims match. Callers check it belongs to an elims stage of the category. */
+export async function deleteMatch(db: Db, id: number) {
+  await db.delete(matches).where(eq(matches.id, id));
+}
+
+/** Removes every match of one elims round. */
+export async function deleteRound(db: Db, stageId: number, round: number) {
+  await db.delete(matches).where(and(eq(matches.stageId, stageId), eq(matches.round, round)));
+}
+
+/** Adds a match to an elims round, after the matches already in it. */
+export async function addGroupMatch(
+  db: Db,
+  stageId: number,
+  round: number,
+  homeTribuId: number,
+  awayTribuId: number,
+) {
+  const [last] = await db
+    .select({ n: sql<number>`coalesce(max(${matches.position}), 0)` })
+    .from(matches)
+    .where(and(eq(matches.stageId, stageId), eq(matches.round, round)));
+  await db.insert(matches).values({
+    stageId,
+    round,
+    position: (last?.n ?? 0) + 1,
+    homeTribuId,
+    awayTribuId,
+  });
+}
+
 export async function deleteCompetition(db: Db, categoryId: number) {
   await db.delete(stages).where(eq(stages.categoryId, categoryId));
 }
