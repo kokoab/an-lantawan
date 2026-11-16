@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readMenuRows } from './menus';
+import { readMenuRows, withoutClosedSumat } from './menus';
 
 describe('readMenuRows', () => {
   it('reads section links and path links in order, dropping blank rows', () => {
@@ -35,5 +35,35 @@ describe('readMenuRows', () => {
       ok: false,
       error: 'Keep this menu to 3 links.',
     });
+  });
+});
+
+describe('withoutClosedSumat', () => {
+  const links = [
+    { label: 'Write to Sumat', href: '/sumat' },
+    { label: 'Published letters', href: '/letters' },
+    { label: 'About', href: '/about' },
+    { label: 'Sumat again', href: '/sumat/?from=menu#top' },
+    { label: 'Not Sumat', href: '/sumatra' },
+  ];
+  const labels = (l: { label: string }[]) => l.map((x) => x.label);
+
+  it('keeps every link while Sumat is open', () => {
+    expect(withoutClosedSumat(links, { sumatOpen: true, hasLetters: false })).toEqual(links);
+  });
+
+  it('drops Sumat links, however they are written, when it is closed', () => {
+    expect(labels(withoutClosedSumat(links, { sumatOpen: false, hasLetters: true }))).toEqual([
+      'Published letters',
+      'About',
+      'Not Sumat',
+    ]);
+  });
+
+  it('drops Published letters too when it is closed and empty', () => {
+    expect(labels(withoutClosedSumat(links, { sumatOpen: false, hasLetters: false }))).toEqual([
+      'About',
+      'Not Sumat',
+    ]);
   });
 });

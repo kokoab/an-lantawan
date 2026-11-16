@@ -17,11 +17,13 @@ interface Props {
   tagline: string;
   facebookUrl: string;
   sportsfest: { name: string; status: string } | null;
+  /** Closed Sumat leaves the header: no button, no card in the menu. */
+  sumatOpen: boolean;
   /** Section slug or path of the current page, to mark its link. */
   current?: string;
 }
 
-const { nav, siteName, tagline, facebookUrl, sportsfest, current } = Astro.props;
+const { nav, siteName, tagline, facebookUrl, sportsfest, sumatOpen, current } = Astro.props;
 const isCurrent = (href: string) => current !== undefined && href === `/${current}`;
 const ongoing = sportsfest?.status === 'ongoing';
 const sportsfestLinks = sportsfest
@@ -58,11 +60,11 @@ const sportsfestLinks = sportsfest
         <span class="menu-closed"><MenuIcon /><span>Menu</span></span>
         <span class="menu-open">Close</span>
       </button>
-      <a class="btn btn-sunrise write" href="/sumat">Write to Sumat</a>
+      {sumatOpen && <a class="btn btn-sunrise write" href="/sumat">Write to Sumat</a>}
     </div>
 
     <div class="actions-phone">
-      <a class="btn btn-sunrise sumat" href="/sumat">Sumat</a>
+      {sumatOpen && <a class="btn btn-sunrise sumat" href="/sumat">Sumat</a>}
       <button class="icon-button" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>
         <span class="menu-closed"><MenuMobileIcon /><span class="visually-hidden">Open menu</span></span>
         <span class="menu-open"><CloseIcon /><span class="visually-hidden">Close menu</span></span>
@@ -130,11 +132,15 @@ const sportsfestLinks = sportsfest
         {nav.write.filter((l) => l.href !== '/sumat').map((l) => <a href={l.href}>{l.label}</a>)}
       </div>
 
-      <div class="sumat-card">
-        <p class="sumat-title">Write to the editorial team</p>
-        <p>Through Sumat. Anonymous unless you sign it.</p>
-        <a class="btn btn-primary" href="/sumat">Write to Sumat</a>
-      </div>
+      {
+        sumatOpen && (
+          <div class="sumat-card">
+            <p class="sumat-title">Write to the editorial team</p>
+            <p>Through Sumat. Anonymous unless you sign it.</p>
+            <a class="btn btn-primary" href="/sumat">Write to Sumat</a>
+          </div>
+        )
+      }
 
       <a class="facebook" href={facebookUrl} rel="noopener" target="_blank">Follow {siteName} on Facebook</a>
     </div>

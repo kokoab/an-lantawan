@@ -46,3 +46,13 @@ export async function listLetters(
     .offset((page - 1) * perPage);
   return { letters: rows, total, pages: Math.max(1, Math.ceil(total / perPage)) };
 }
+
+/** Whether any letter is published, so the menu can hide an empty letters page. */
+export async function hasPublishedLetters(db: Db): Promise<boolean> {
+  const [row] = await db
+    .select({ id: stories.id })
+    .from(stories)
+    .where(and(eq(stories.kind, 'letter'), liveStory))
+    .limit(1);
+  return row !== undefined;
+}

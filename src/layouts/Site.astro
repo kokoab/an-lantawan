@@ -2,10 +2,13 @@
 /** Every public page except Sumat: header, menu, footer and the page grid. */
 import SiteFooter from '../components/site/SiteFooter.astro';
 import SiteHeader from '../components/site/SiteHeader.astro';
+import { withoutClosedSumat } from '../core/menus';
 import { settingDefaults } from '../core/settings';
 import { db } from '../db/client';
+import { hasPublishedLetters } from '../db/queries/letters';
 import { getCurrentSportsfest, getNavigation } from '../db/queries/navigation';
 import { getSettings } from '../db/queries/settings';
+import { currentPrompt } from '../db/queries/sumat';
 import Base from './Base.astro';
 import '../styles/site.css';
 
@@ -19,9 +22,11 @@ interface Props {
 }
 
 const { title, shareTitle, description, image, current } = Astro.props;
-const [nav, sportsfest, settings] = await Promise.all([
+const [allLinks, sportsfest, prompt, hasLetters, settings] = await Promise.all([
   getNavigation(db),
   getCurrentSportsfest(db),
+  currentPrompt(db),
+  hasPublishedLetters(db),
   getSettings(
     db,
     settingDefaults(
@@ -33,6 +38,13 @@ const [nav, sportsfest, settings] = await Promise.all([
     ),
   ),
 ]);
+const sumatOpen = prompt !== null;
+const nav = Object.fromEntries(
+  Object.entries(allLinks).map(([group, links]) => [
+    group,
+    withoutClosedSumat(links, { sumatOpen, hasLetters }),
+  ]),
+) as typeof allLinks;
 const siteName = settings['site.name'];
 const pageTitle = title === siteName ? title : `${title} · ${siteName}`;
 ---
@@ -45,6 +57,7 @@ const pageTitle = title === siteName ? title : `${title} · ${siteName}`;
     tagline={settings['site.tagline']}
     facebookUrl={settings['site.facebook_url']}
     sportsfest={sportsfest}
+    sumatOpen={sumatOpen}
     current={current}
   />
   <main id="main">

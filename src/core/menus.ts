@@ -52,3 +52,25 @@ export function readMenuRows(
   if (rows.length > max) return { ok: false, error: `Keep this menu to ${max} links.` };
   return { ok: true, rows };
 }
+
+/** The path a menu link points to, without query, hash or trailing slash. */
+function linkPath(href: string): string {
+  return href.split(/[?#]/)[0].replace(/(.)\/+$/, '$1');
+}
+
+/**
+ * Drops links to Sumat while it is closed, and links to Published letters while it is
+ * closed and nothing has been published, so the public site never points at a dead page.
+ */
+export function withoutClosedSumat<T extends { href: string }>(
+  links: readonly T[],
+  { sumatOpen, hasLetters }: { sumatOpen: boolean; hasLetters: boolean },
+): T[] {
+  if (sumatOpen) return [...links];
+  return links.filter((l) => {
+    const path = linkPath(l.href);
+    if (path === '/sumat') return false;
+    if (path === '/letters') return hasLetters;
+    return true;
+  });
+}
