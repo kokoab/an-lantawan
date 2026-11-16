@@ -339,3 +339,43 @@ select {
     gap: 16px;
   }
 }
+
+/* The bar across the top while the next page loads (src/scripts/navigation.ts). It creeps
+   towards the end and never fills, because a page load can't report real progress. */
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 1000;
+  height: 3px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--sunrise);
+  transform: scaleX(0);
+  transform-origin: left;
+  opacity: 0;
+  pointer-events: none;
+}
+.nav-progress.loading {
+  opacity: 1;
+  animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.3, 1) forwards;
+}
+.nav-progress.done {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+@keyframes nav-progress {
+  0% {
+    transform: scaleX(0);
+  }
+  10% {
+    transform: scaleX(0.35);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress.loading {
+    animation: none;
+    transform: scaleX(0.6);
+  }
+}

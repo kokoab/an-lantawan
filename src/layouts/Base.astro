@@ -1,4 +1,6 @@
 ---
+import geistLatin from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
+
 /** Document shell shared by every public page: language, SEO and social tags. */
 interface Props {
   title: string;
@@ -29,9 +31,13 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     {image && <meta property="og:image" content={new URL(image, Astro.site)} />}
     <meta name="theme-color" content={themeColor} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href={geistLatin} as="font" type="font/woff2" crossorigin />
     <slot name="head" />
   </head>
   <body>
     <slot />
+    <script>
+      import '../scripts/navigation';
+    </script>
   </body>
 </html>
