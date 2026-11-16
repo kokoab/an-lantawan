@@ -1,0 +1,83 @@
+---
+import Field from '../../../../components/admin/Field.astro';
+import { parseForm } from '../../../../core/forms';
+import { db } from '../../../../db/client';
+import { createEvent, getSportsfestRow } from '../../../../db/queries/admin/sportsfest';
+import Admin from '../../../../layouts/Admin.astro';
+import { editorOf, readForm, record } from '../../../../lib/admin';
+import { eventForm } from '../../../../lib/admin-schemas';
+
+const editor = editorOf(Astro);
+const year = /^\d{4}$/.test(Astro.params.year ?? '') ? Number(Astro.params.year) : null;
+const sf = year ? await getSportsfestRow(db, year) : null;
+if (!sf) return Astro.rewrite('/404');
+const back = `/admin/sportsfest/${sf.year}`;
+
+let values: Record<string, unknown> = { type: 'bracket', status: 'scheduled' };
+let errors: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await readForm(Astro.request);
+  values = form;
+  const parsed = parseForm(eventForm, form);
+  if (parsed.ok) {
+    const { categories, ...input } = parsed.data;
+    const names = (categories ?? '')
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    const id = await createEvent(db, sf.id, input, names.length ? names : ['Open']);
+    await record(editor, {
+      action: 'create',
+      entityType: 'event',
+      entityId: id,
+      summary: `Added ${input.name} to ${sf.name}`,
+    });
+    return Astro.redirect(`${back}/${id}?done=created`, 303);
+  }
+  errors = parsed.errors;
+  Astro.response.status = 422;
+}
+
+const v = (k: string) => (values[k] ?? '') as string;
+const TYPES = [
+  { value: 'bracket', label: 'Matches between tribus' },
+  { value: 'race', label: 'Timed or measured (athletics, swimming)' },
+  { value: 'judged', label: 'Judged (dance, pageant)' },
+  { value: 'mind', label: 'Ranked (quiz, games of the mind)' },
+];
+const STATUSES = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'ongoing', label: 'Ongoing' },
+  { value: 'done', label: 'Done' },
+  { value: 'postponed', label: 'Postponed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+---
+
+<Admin title="Add an event" section="sportsfest" back={{ label: sf.name, href: back }}>
+  <form class="panel form narrow" method="post">
+    <Field name="name" id="event-name" label="Event" value={v('name')} error={errors.name} placeholder="Basketball" maxlength={80} />
+    <Field name="categories" label="Categories (optional)" value={v('categories')} error={errors.categories} hint="Separate them with commas, like Men’s, Women’s. Medals are given per category. Leave empty for one category. You can group them later, like Men’s over 50m freestyle." />
+    <div class="row two">
+      <Field name="type" label="How it’s decided" type="select" options={TYPES} value={v('type')} error={errors.type} />
+      <Field name="status" label="Status" type="select" options={STATUSES} value={v('status')} error={errors.status} />
+    </div>
+    <div class="row two">
+      <Field name="startsAt" label="Starts (optional)" type="datetime-local" value={v('startsAt')} error={errors.startsAt} hint="Philippine time." />
+      <Field name="venue" label="Venue (optional)" value={v('venue')} error={errors.venue} placeholder="Gymnasium" />
+    </div>
+    <Field name="note" label="Note (optional)" value={v('note')} error={errors.note} hint="Shown before results are in, like “All four tribus perform. Results after judging.”" />
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Add event</button>
+      <a class="btn btn-secondary" href={back}>Cancel</a>
+    </div>
+  </form>
+</Admin>
+
+<style>
+  .narrow {
+    max-width: 760px;
+  }
+</style>
