@@ -1,6 +1,15 @@
 import { env } from 'cloudflare:workers';
 import { imageSize } from 'image-size';
-import { checkUpload, MAX_BYTES, type MediaKind, pdfPageCount, uploadKey } from '../core/media';
+import {
+  checkUpload,
+  MAX_BYTES,
+  type MediaKind,
+  PHOTO_WIDTHS,
+  pdfPageCount,
+  uploadKey,
+  variantKey,
+  variantWidths,
+} from '../core/media';
 import type { Db } from '../db/client';
 import { insertMedia } from '../db/queries/admin/media';
 
@@ -41,6 +50,7 @@ export async function storeUpload(
 
   const key = uploadKey(file.name, check.type, new Date(), randomPart());
   await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: check.type.mime } });
+  if (check.type.kind === 'image') await storeCopies(key, bytes, width, check.type.mime);
   const row = await insertMedia(db, {
     key,
     kind: check.type.kind,
@@ -55,9 +65,31 @@ export async function storeUpload(
   return { ok: true, media: row, pages: check.type.kind === 'pdf' ? pdfPageCount(bytes) : null };
 }
 
-/** Removes a file from R2. Its database row is deleted separately, once nothing uses it. */
+/**
+ * Saves the smaller WebP copies of a photo. A copy that fails (the monthly resize allowance
+ * ran out, say) is skipped: pages then fall back to the original, which always works.
+ */
+async function storeCopies(key: string, bytes: Uint8Array, width: number | null, mime: string) {
+  await Promise.all(
+    variantWidths(width, mime).map(async (w) => {
+      try {
+        const result = await env.IMAGES.input(new Blob([bytes as Uint8Array<ArrayBuffer>]).stream())
+          .transform({ width: w, fit: 'scale-down' })
+          .output({ format: 'image/webp', quality: 80 });
+        const copy = await result.response().arrayBuffer();
+        await env.MEDIA.put(variantKey(key, w), copy, {
+          httpMetadata: { contentType: 'image/webp' },
+        });
+      } catch (error) {
+        console.warn(`Couldn't make the ${w}px copy of ${key}`, error);
+      }
+    }),
+  );
+}
+
+/** Removes a file and its smaller copies from R2. Its database row is deleted separately. */
 export async function removeStored(key: string) {
-  await env.MEDIA.delete(key);
+  await env.MEDIA.delete([key, ...PHOTO_WIDTHS.map((w) => variantKey(key, w))]);
 }
 
 /**

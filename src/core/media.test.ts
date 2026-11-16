@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { checkUpload, pdfPageCount, sniff, uploadKey, uploadName } from './media';
+import {
+  checkUpload,
+  isPhotoWidth,
+  pdfPageCount,
+  sniff,
+  uploadKey,
+  uploadName,
+  variantKey,
+  variantWidths,
+} from './media';
 
 const bytes = (...b: number[]) => new Uint8Array([...b, ...new Array(16).fill(0)]);
 const JPG = bytes(0xff, 0xd8, 0xff, 0xe0);
@@ -125,5 +134,31 @@ describe('uploadName', () => {
 
   it('leaves names without a random part alone', () => {
     expect(uploadName('cover.jpg')).toBe('cover.jpg');
+  });
+});
+
+describe('photo copies', () => {
+  it('puts each copy beside the original as WebP', () => {
+    expect(variantKey('uploads/2026/11/abc123defg-team-photo.jpg', 960)).toBe(
+      'uploads/2026/11/abc123defg-team-photo.w960.webp',
+    );
+    expect(variantKey('uploads/2026/11/x-logo.webp', 480)).toBe('uploads/2026/11/x-logo.w480.webp');
+  });
+
+  it('only makes copies narrower than the original', () => {
+    expect(variantWidths(2400, 'image/jpeg')).toEqual([480, 960, 1600]);
+    expect(variantWidths(1600, 'image/png')).toEqual([480, 960]);
+    expect(variantWidths(700, 'image/webp')).toEqual([480]);
+    expect(variantWidths(480, 'image/jpeg')).toEqual([]);
+    expect(variantWidths(null, 'image/jpeg')).toEqual([480, 960, 1600]);
+  });
+
+  it('leaves GIFs alone so they keep moving', () => {
+    expect(variantWidths(2000, 'image/gif')).toEqual([]);
+  });
+
+  it('only accepts the widths it makes', () => {
+    expect([480, 960, 1600].every(isPhotoWidth)).toBe(true);
+    expect([0, 500, 3000, Number.NaN].some(isPhotoWidth)).toBe(false);
   });
 });

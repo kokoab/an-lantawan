@@ -68,6 +68,29 @@ export function uploadKey(fileName: string, type: FileType, now: Date, random: s
   return `uploads/${month}/${random}-${base}.${type.ext}`;
 }
 
+/**
+ * Smaller copies saved beside each photo, so phones don't download a desktop-sized file.
+ * Each is a WebP next to the original: uploads/2026/11/abc-photo.jpg → abc-photo.w960.webp.
+ */
+export const PHOTO_WIDTHS = [480, 960, 1600] as const;
+export type PhotoWidth = (typeof PHOTO_WIDTHS)[number];
+
+export const isPhotoWidth = (n: number): n is PhotoWidth =>
+  (PHOTO_WIDTHS as readonly number[]).includes(n);
+
+/** The R2 key of a photo's smaller copy. */
+export const variantKey = (key: string, width: PhotoWidth) =>
+  `${key.replace(/\.[a-z0-9]{2,5}$/i, '')}.w${width}.webp`;
+
+/**
+ * Which smaller copies are worth making for a photo this wide: only ones narrower than
+ * the original. GIFs keep their animation, so they get none. Unknown width: all of them.
+ */
+export function variantWidths(width: number | null, mime: string): PhotoWidth[] {
+  if (mime === 'image/gif') return [];
+  return PHOTO_WIDTHS.filter((w) => width === null || w < width);
+}
+
 /** The file name an editor recognises, from a stored key: no folders, no random prefix. */
 export const uploadName = (key: string) =>
   (key.split('/').pop() ?? key).replace(/^[a-z0-9]{10}-/, '');

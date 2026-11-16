@@ -5,6 +5,8 @@
   "compatibility_date": "2026-10-23",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Resizes photos into smaller WebP copies when they are uploaded.
+  "images": { "binding": "IMAGES" },
   // Public values only. Secrets (GOOGLE_CLIENT_SECRET, TURNSTILE_SECRET) are set with
   // `wrangler secret put` and never committed.
   "vars": {
