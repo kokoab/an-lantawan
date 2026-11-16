@@ -191,12 +191,12 @@ const ne = failedNew?.errors ?? {};
                   </button>
                 </div>
                 <div class="row two">
-                  <Field name={fieldOf(t, 'name')} id={`name-${t.id}`} label="Name" value={valueOf(t, 'name')} error={e.name} maxlength={60} />
-                  <Field name={fieldOf(t, 'slug')} id={`slug-${t.id}`} label="URL name" value={valueOf(t, 'slug')} error={e.slug} />
+                  <Field name={fieldOf(t, 'name')} id={`name-${t.id}`} label="Name" value={fieldValue(t, 'name')} error={e.name} maxlength={60} />
+                  <Field name={fieldOf(t, 'slug')} id={`slug-${t.id}`} label="URL name" value={fieldValue(t, 'slug')} error={e.slug} />
                 </div>
                 <div class="row two">
-                  <Field name={fieldOf(t, 'color')} id={`color-${t.id}`} label="Colour" type="color" value={valueOf(t, 'color')} error={e.color} hint="Used for its square on every Sportsfest page." />
-                  <Field name={fieldOf(t, 'sort')} id={`sort-${t.id}`} label="Order" type="number" min={0} max={999} value={valueOf(t, 'sort')} error={e.sort} />
+                  <Field name={fieldOf(t, 'color')} id={`color-${t.id}`} label="Colour" type="color" value={fieldValue(t, 'color')} error={e.color} hint="Used for its square on every Sportsfest page." />
+                  <Field name={fieldOf(t, 'sort')} id={`sort-${t.id}`} label="Order" type="number" min={0} max={999} value={fieldValue(t, 'sort')} error={e.sort} />
                 </div>
                 <PhotoField name={fieldOf(t, 'logo')} label="Logo" current={t.logoKey ? { key: t.logoKey } : null} error={e.logo} hint="Optional. Without one, the square shows the first letter on the colour." />
               </fieldset>
