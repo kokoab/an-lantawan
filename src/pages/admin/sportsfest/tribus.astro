@@ -9,26 +9,33 @@ import {
   listAllTribus,
   setTribuArchived,
   tribuSlugTaken,
-  updateTribu,
+  updateTribus,
 } from '../../../db/queries/admin/sportsfest';
 import Admin from '../../../layouts/Admin.astro';
 import { doneRedirect, editorOf, one, readFormWithFiles, record } from '../../../lib/admin';
 import { tribuForm } from '../../../lib/admin-schemas';
 import { resolveUpload } from '../../../lib/uploads';
 
+type Tribu = Awaited<ReturnType<typeof listAllTribus>>[number];
+
 const editor = editorOf(Astro);
 const tribus = await listAllTribus(db);
-let failed: {
-  id: number | null;
-  errors: Record<string, string>;
+const FIELDS = ['name', 'slug', 'color', 'sort'] as const;
+/** Every existing tribu is edited in one form; its fields end in its ID, like name_3. */
+const fieldOf = (t: Tribu, f: string) => `${f}_${t.id}`;
+
+let failedAll: {
+  errors: Record<number, Record<string, string>>;
   values: Record<string, unknown>;
 } | null = null;
+let failedNew: { errors: Record<string, string>; values: Record<string, unknown> } | null = null;
+let summary: string | null = null;
 
 if (Astro.request.method === 'POST') {
   const form = await readFormWithFiles(Astro.request);
   const intent = one(form.values, 'intent');
-  const id = Number(one(form.values, 'tribuId')) || null;
-  const tribu = id ? tribus.find((t) => t.id === id) : null;
+  const tribu = tribus.find((t) => t.id === Number(one(form.values, 'tribuId')));
+
   if ((intent === 'archive' || intent === 'restore') && tribu) {
     await setTribuArchived(db, tribu.id, intent === 'archive');
     await record(editor, {
@@ -43,105 +50,192 @@ if (Astro.request.method === 'POST') {
       intent === 'archive' ? 'archived' : 'restored',
     );
   }
-  const parsed = parseForm(tribuForm, form.values);
-  const errors: Record<string, string> = parsed.ok ? {} : parsed.errors;
-  if (parsed.ok && (await tribuSlugTaken(db, parsed.data.slug, tribu?.id ?? null)))
-    errors.slug = 'Another tribu uses this URL name.';
-  if (parsed.ok && !Object.keys(errors).length) {
-    const logo = await resolveUpload(
-      db,
-      {
-        name: 'logo',
-        current: tribu?.logoId ?? null,
-        want: 'image',
-        alt: `${parsed.data.name} logo`,
-      },
-      form,
-      editor.id,
-    );
-    if (!logo.ok) errors.logo = logo.error;
-    else {
-      const input = { ...parsed.data, logoId: logo.id };
-      const savedId = tribu ? tribu.id : await createTribu(db, input);
-      if (tribu) await updateTribu(db, tribu.id, input);
-      await record(editor, {
-        action: tribu ? 'update' : 'create',
-        entityType: 'tribu',
-        entityId: savedId,
-        summary: `${tribu ? 'Edited' : 'Added'} the ${parsed.data.name} tribu`,
-      });
-      return doneRedirect(Astro, '/admin/sportsfest/tribus', tribu ? 'saved' : 'created');
+
+  if (intent === 'save-all') {
+    // Check every tribu before saving any, so a mistake in one never half-saves the rest.
+    const errors: Record<number, Record<string, string>> = {};
+    const parsed = new Map<number, { name: string; slug: string; color: string; sort: number }>();
+    for (const t of tribus) {
+      const values = Object.fromEntries(FIELDS.map((f) => [f, form.values[fieldOf(t, f)] ?? '']));
+      const p = parseForm(tribuForm, values);
+      if (p.ok) parsed.set(t.id, p.data);
+      else errors[t.id] = p.errors;
     }
+    const seen = new Map<string, number>();
+    for (const [id, data] of parsed) {
+      const other = seen.get(data.slug);
+      if (other !== undefined) {
+        errors[id] = { ...errors[id], slug: 'Another tribu uses this URL name.' };
+        errors[other] = { ...errors[other], slug: 'Another tribu uses this URL name.' };
+      }
+      seen.set(data.slug, id);
+    }
+    if (!Object.keys(errors).length) {
+      const rows: Parameters<typeof updateTribus>[1] = [];
+      for (const t of tribus) {
+        const data = parsed.get(t.id);
+        if (!data) continue;
+        const logo = await resolveUpload(
+          db,
+          { name: fieldOf(t, 'logo'), current: t.logoId, want: 'image', alt: `${data.name} logo` },
+          form,
+          editor.id,
+        );
+        if (!logo.ok) {
+          errors[t.id] = { logo: logo.error };
+          continue;
+        }
+        const changed =
+          data.name !== t.name ||
+          data.slug !== t.slug ||
+          data.color.toLowerCase() !== t.color.toLowerCase() ||
+          data.sort !== t.sort ||
+          logo.id !== t.logoId;
+        if (changed)
+          rows.push({
+            id: t.id,
+            input: { ...data, logoId: logo.id },
+            slugChanged: data.slug !== t.slug,
+          });
+      }
+      if (!Object.keys(errors).length) {
+        if (rows.length) {
+          await updateTribus(db, rows);
+          for (const r of rows) {
+            await record(editor, {
+              action: 'update',
+              entityType: 'tribu',
+              entityId: r.id,
+              summary: `Edited the ${r.input.name} tribu`,
+            });
+          }
+        }
+        return doneRedirect(Astro, '/admin/sportsfest/tribus', 'saved');
+      }
+    }
+    failedAll = { errors, values: form.values };
+    const names = Object.keys(errors).flatMap(
+      (id) => tribus.find((t) => t.id === Number(id))?.name ?? [],
+    );
+    summary = `Nothing was saved. Check ${names.join(', ')}.`;
+  } else {
+    // Adding a tribu.
+    const p = parseForm(tribuForm, form.values);
+    const errors: Record<string, string> = p.ok ? {} : p.errors;
+    if (p.ok && (await tribuSlugTaken(db, p.data.slug, null)))
+      errors.slug = 'Another tribu uses this URL name.';
+    if (p.ok && !Object.keys(errors).length) {
+      const logo = await resolveUpload(
+        db,
+        { name: 'logo', current: null, want: 'image', alt: `${p.data.name} logo` },
+        form,
+        editor.id,
+      );
+      if (!logo.ok) errors.logo = logo.error;
+      else {
+        const id = await createTribu(db, { ...p.data, logoId: logo.id });
+        await record(editor, {
+          action: 'create',
+          entityType: 'tribu',
+          entityId: id,
+          summary: `Added the ${p.data.name} tribu`,
+        });
+        return doneRedirect(Astro, '/admin/sportsfest/tribus', 'created');
+      }
+    }
+    failedNew = { errors, values: form.values };
   }
-  failed = { id: tribu?.id ?? null, errors, values: form.values };
   Astro.response.status = 422;
 }
 
-const valuesFor = (t: (typeof tribus)[number] | null) =>
-  failed && failed.id === (t?.id ?? null)
-    ? failed.values
-    : t
-      ? { ...t }
-      : { color: '#6B6B68', sort: String(tribus.length + 1) };
-const errorsFor = (t: (typeof tribus)[number] | null) =>
-  failed && failed.id === (t?.id ?? null) ? failed.errors : {};
+const fieldValue = (t: Tribu, f: (typeof FIELDS)[number]) =>
+  String(failedAll ? (failedAll.values[fieldOf(t, f)] ?? '') : t[f]);
+const errorsOf = (t: Tribu) => failedAll?.errors[t.id] ?? {};
+const newValues: Record<string, unknown> = failedNew?.values ?? {
+  color: '#6B6B68',
+  sort: String(tribus.length + 1),
+};
+const nv = (k: string) => (newValues[k] ?? '') as string;
+const ne = failedNew?.errors ?? {};
 ---
 
 <Admin title="Tribus" section="sportsfest">
   <p class="panel-note">
     Tribus carry over from year to year. Each Sportsfest picks which tribus take part. Archive a tribu that no longer competes: its past results stay.
   </p>
-  <div class="tribus">
-    {
-      [...tribus, null].map((t) => {
-        const v = valuesFor(t);
-        const e = errorsFor(t);
-        const s = (k: string) => (v[k] ?? '') as string;
-        return (
-          <form class:list={['panel', 'form', { archived: t?.archivedAt }]} method="post" enctype="multipart/form-data">
-            <div class="panel-head">
-              <h2>
-                {t ? (
-                  <span class="title">
+  {summary && <p class="admin-error-summary" role="alert">{summary}</p>}
+
+  {
+    tribus.length > 0 && (
+      <form class="all" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="intent" value="save-all" />
+        <div class="tribus">
+          {tribus.map((t) => {
+            const e = errorsOf(t);
+            return (
+              <fieldset class:list={['panel', 'form', { archived: t.archivedAt }]}>
+                <legend class="visually-hidden">{t.name}</legend>
+                <div class="panel-head">
+                  <h2 class="title">
                     <TribuMark tribu={t} size="md" />
                     {t.name}
                     {t.archivedAt && <span class="badge">Archived</span>}
-                  </span>
-                ) : (
-                  'Add a tribu'
-                )}
-              </h2>
-            </div>
-            {t && <input type="hidden" name="tribuId" value={t.id} />}
-            <div class="row two">
-              <Field name="name" id={`name-${t?.id ?? 'new'}`} label="Name" value={s('name')} error={e.name} maxlength={60} />
-              <Field name="slug" id={`slug-${t?.id ?? 'new'}`} label="URL name" value={s('slug')} error={e.slug} slugFrom={`name-${t?.id ?? 'new'}`} />
-            </div>
-            <div class="row two">
-              <Field name="color" id={`color-${t?.id ?? 'new'}`} label="Colour" type="color" value={s('color')} error={e.color} hint="Used for its square on every Sportsfest page." />
-              <Field name="sort" id={`sort-${t?.id ?? 'new'}`} label="Order" type="number" min={0} max={999} value={s('sort')} error={e.sort} />
-            </div>
-            <PhotoField name="logo" label="Logo" current={t?.logoKey ? { key: t.logoKey } : null} error={e.logo} hint="Optional. Without one, the square shows the first letter on the colour." />
-            <div class="form-actions">
-              <button class="btn btn-primary" type="submit" name="intent" value="save">{t ? 'Save' : 'Add tribu'}</button>
-              {t && (
-                <button
-                  class:list={['btn', t.archivedAt ? 'btn-secondary' : 'btn-danger']}
-                  type="submit"
-                  name="intent"
-                  value={t.archivedAt ? 'restore' : 'archive'}
-                  formnovalidate
-                  data-confirm={t.archivedAt ? undefined : `Archive ${t.name}? It won’t be offered for new Sportsfests. Past results stay.`}
-                >
-                  {t.archivedAt ? 'Restore' : 'Archive'}
-                </button>
-              )}
-            </div>
-          </form>
-        );
-      })
-    }
-  </div>
+                  </h2>
+                  <button
+                    class:list={['btn', 'btn-small', t.archivedAt ? 'btn-secondary' : 'btn-danger']}
+                    type="submit"
+                    form={`state-${t.id}`}
+                    data-confirm={t.archivedAt ? undefined : `Archive ${t.name}? It won’t be offered for new Sportsfests. Past results stay. Unsaved edits on this page are lost.`}
+                  >
+                    {t.archivedAt ? 'Restore' : 'Archive'}
+                  </button>
+                </div>
+                <div class="row two">
+                  <Field name={fieldOf(t, 'name')} id={`name-${t.id}`} label="Name" value={valueOf(t, 'name')} error={e.name} maxlength={60} />
+                  <Field name={fieldOf(t, 'slug')} id={`slug-${t.id}`} label="URL name" value={valueOf(t, 'slug')} error={e.slug} />
+                </div>
+                <div class="row two">
+                  <Field name={fieldOf(t, 'color')} id={`color-${t.id}`} label="Colour" type="color" value={valueOf(t, 'color')} error={e.color} hint="Used for its square on every Sportsfest page." />
+                  <Field name={fieldOf(t, 'sort')} id={`sort-${t.id}`} label="Order" type="number" min={0} max={999} value={valueOf(t, 'sort')} error={e.sort} />
+                </div>
+                <PhotoField name={fieldOf(t, 'logo')} label="Logo" current={t.logoKey ? { key: t.logoKey } : null} error={e.logo} hint="Optional. Without one, the square shows the first letter on the colour." />
+              </fieldset>
+            );
+          })}
+        </div>
+        <div class="save-bar">
+          <span class="muted small">Saves every tribu above at once.</span>
+          <button class="btn btn-primary" type="submit">Save all tribus</button>
+        </div>
+      </form>
+    )
+  }
+
+  {
+    tribus.map((t) => (
+      <form method="post" id={`state-${t.id}`} hidden>
+        <input type="hidden" name="intent" value={t.archivedAt ? 'restore' : 'archive'} />
+        <input type="hidden" name="tribuId" value={t.id} />
+      </form>
+    ))
+  }
+
+  <form class="panel form add" method="post" enctype="multipart/form-data">
+    <div class="panel-head"><h2>Add a tribu</h2></div>
+    <input type="hidden" name="intent" value="add" />
+    <div class="row two">
+      <Field name="name" id="name-new" label="Name" value={nv('name')} error={ne.name} maxlength={60} />
+      <Field name="slug" id="slug-new" label="URL name" value={nv('slug')} error={ne.slug} slugFrom="name-new" />
+    </div>
+    <div class="row two">
+      <Field name="color" id="color-new" label="Colour" type="color" value={nv('color')} error={ne.color} />
+      <Field name="sort" id="sort-new" label="Order" type="number" min={0} max={999} value={nv('sort')} error={ne.sort} />
+    </div>
+    <PhotoField name="logo" label="Logo" current={null} error={ne.logo} hint="Optional." />
+    <div class="form-actions">
+      <button class="btn btn-secondary" type="submit">Add tribu</button>
+    </div>
+  </form>
 </Admin>
 
 <style>
@@ -153,6 +247,9 @@ const errorsFor = (t: (typeof tribus)[number] | null) =>
     min-width: 0;
     margin: 0;
   }
+  fieldset.panel {
+    border: 1px solid var(--grey-300);
+  }
   .title {
     display: flex;
     align-items: center;
@@ -160,6 +257,23 @@ const errorsFor = (t: (typeof tribus)[number] | null) =>
   }
   .archived {
     opacity: 0.7;
+  }
+  .save-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 12px 0;
+    border-top: 1px solid var(--grey-300);
+    background: var(--grey-50);
+  }
+  .add {
+    margin-top: 24px;
   }
   @media (min-width: 1200px) {
     .tribus {

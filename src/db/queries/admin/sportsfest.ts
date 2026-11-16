@@ -52,6 +52,27 @@ export async function updateTribu(db: Db, id: number, input: TribuInput) {
   await db.update(tribus).set(input).where(eq(tribus.id, id));
 }
 
+/**
+ * Saves several tribus at once, all or nothing. Changed URL names are parked first, so two
+ * tribus can trade names in one save without tripping the unique index.
+ */
+export async function updateTribus(
+  db: Db,
+  rows: Array<{ id: number; input: TribuInput; slugChanged: boolean }>,
+) {
+  await runBatch(db, [
+    ...rows
+      .filter((r) => r.slugChanged)
+      .map((r) =>
+        db
+          .update(tribus)
+          .set({ slug: `__moving-${r.id}` })
+          .where(eq(tribus.id, r.id)),
+      ),
+    ...rows.map((r) => db.update(tribus).set(r.input).where(eq(tribus.id, r.id))),
+  ]);
+}
+
 export async function setTribuArchived(db: Db, id: number, archived: boolean) {
   await db
     .update(tribus)
