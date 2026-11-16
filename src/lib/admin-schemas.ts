@@ -185,7 +185,6 @@ export const sportsfestForm = z.object({
 
 export const eventForm = z.object({
   name: text(80, 'Name the event, like Basketball.'),
-  slug,
   type: z.enum(EVENT_TYPES, { message: 'Choose how it is decided.' }),
   status: z.enum(EVENT_STATUSES, { message: 'Choose where it stands.' }),
   venue: optionalText(120),

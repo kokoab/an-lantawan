@@ -22,7 +22,6 @@ import {
   deleteCompetition,
   deleteEvent,
   eventHasResults,
-  eventSlugTaken,
   getCompetition,
   getEventAdmin,
   getSportsfestRow,
@@ -71,13 +70,9 @@ if (Astro.request.method === 'POST') {
     const parsed = parseForm(eventForm, form);
     if (parsed.ok) {
       const { categories: _, ...input } = parsed.data;
-      if (await eventSlugTaken(db, sf.id, input.slug, event.id))
-        errors.slug = 'Another event this year uses this URL name.';
-      else {
-        await updateEvent(db, event.id, input);
-        await log(`Edited ${input.name}, ${sf.name}`);
-        return doneRedirect(Astro, here, 'saved');
-      }
+      await updateEvent(db, event.id, input);
+      await log(`Edited ${input.name}, ${sf.name}`);
+      return doneRedirect(Astro, here, 'saved');
     } else errors = parsed.errors;
   } else if (intent === 'delete-event') {
     if (await eventHasResults(db, event.id))
@@ -256,7 +251,7 @@ const [finishes, comp] = category
 const placeOf = new Map(finishes.map((f) => [f.tribuId, f]));
 const ev = (k: string) => (eventValues[k] ?? '') as string;
 const TYPES = [
-  { value: 'bracket', label: 'Matches (a bracket or round robin)' },
+  { value: 'bracket', label: 'Matches between tribus' },
   { value: 'race', label: 'Timed or measured' },
   { value: 'judged', label: 'Judged' },
   { value: 'mind', label: 'Ranked' },
@@ -480,12 +475,11 @@ const medalLabel = (p: number) => ['', 'Gold', 'Silver', 'Bronze'][p] ?? '';
         <h2>Event</h2>
         <input type="hidden" name="intent" value="event" />
         <Field name="name" id="event-name" label="Event" value={ev('name')} error={errors.name} maxlength={80} />
-        <Field name="slug" label="URL name" value={ev('slug')} error={errors.slug} />
         <Field name="type" label="How it’s decided" type="select" options={TYPES} value={ev('type')} error={errors.type} />
         <Field name="status" label="Status" type="select" options={STATUSES} value={ev('status')} error={errors.status} hint="A category with a gold medal shows as final on its own." />
-        <Field name="startsAt" label="Starts" type="datetime-local" value={ev('startsAt')} error={errors.startsAt} />
-        <Field name="venue" label="Venue" value={ev('venue')} error={errors.venue} />
-        <Field name="note" label="Note" value={ev('note')} error={errors.note} />
+        <Field name="startsAt" label="Starts (optional)" type="datetime-local" value={ev('startsAt')} error={errors.startsAt} hint="Philippine time." />
+        <Field name="venue" label="Venue (optional)" value={ev('venue')} error={errors.venue} />
+        <Field name="note" label="Note (optional)" value={ev('note')} error={errors.note} />
         <div class="form-actions"><button class="btn btn-primary" type="submit">Save event</button></div>
       </form>
 

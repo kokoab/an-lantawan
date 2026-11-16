@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, like, sql } from 'drizzle-orm';
+import { slugify } from '../../../core/slug';
 import type { BracketMatch, BracketStage } from '../../../core/sportsfest/bracket';
 import type { Finish } from '../../../core/sportsfest/medals';
 import { type Query, runBatch } from '../../batch';
@@ -179,22 +180,25 @@ export async function getEventAdmin(db: Db, sportsfestId: number, eventId: numbe
   return { ...event, categories: cats };
 }
 
-export async function eventSlugTaken(
-  db: Db,
-  sportsfestId: number,
-  slug: string,
-  exceptId: number | null,
-) {
-  const [row] = await db
-    .select({ id: events.id })
+/**
+ * A URL name for a new event: its name, with a number added if another event that year
+ * has it. Set once, so renaming the event never breaks a shared link.
+ */
+export async function freeEventSlug(db: Db, sportsfestId: number, name: string) {
+  const base = slugify(name) || 'event';
+  const rows = await db
+    .select({ slug: events.slug })
     .from(events)
-    .where(and(eq(events.sportsfestId, sportsfestId), eq(events.slug, slug)));
-  return row !== undefined && row.id !== exceptId;
+    .where(and(eq(events.sportsfestId, sportsfestId), like(events.slug, `${base}%`)));
+  const taken = new Set(rows.map((r) => r.slug));
+  let slug = base;
+  for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+  return slug;
 }
 
 type EventInput = Pick<
   typeof events.$inferInsert,
-  'name' | 'slug' | 'type' | 'status' | 'venue' | 'startsAt' | 'note'
+  'name' | 'type' | 'status' | 'venue' | 'startsAt' | 'note'
 >;
 
 export async function createEvent(
@@ -203,9 +207,10 @@ export async function createEvent(
   input: EventInput,
   categoryNames: string[],
 ) {
+  const slug = await freeEventSlug(db, sportsfestId, input.name);
   const [row] = await db
     .insert(events)
-    .values({ ...input, sportsfestId })
+    .values({ ...input, slug, sportsfestId })
     .returning({ id: events.id });
   await runBatch(
     db,
