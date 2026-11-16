@@ -5,6 +5,9 @@
   "compatibility_date": "2026-10-23",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Runs the Worker near the database instead of near each reader: a page makes several
+  // queries, and each one would otherwise cross the region.
+  "placement": { "mode": "smart" },
   // Resizes photos into smaller WebP copies when they are uploaded.
   "images": { "binding": "IMAGES" },
   // Public values only. Secrets (GOOGLE_CLIENT_SECRET, TURNSTILE_SECRET) are set with
